@@ -43,17 +43,18 @@ def get_dataset(self, which="text", load_simmilar=True):
 def get_word2vec(which="fasttext"):
     which = which.lower()
     if which == "fasttext":
-        fasttext = word_to_vector.FastText()
+        return word_to_vector.FastText()
     if which == "glove":
-        glove = word_to_vector.Glove()
+        return word_to_vector.Glove()
     if which == "skip_gram":
-        skip_gram = word_to_vector.CharNGram()
+        return word_to_vector.CharNGram()
 
 
 def embed(dataset, method):
-    embedding_weights = torch.Tensor(dataset.num_rows, method.dim)
-    for i, token in enumerate(dataset.num_rows):
-        embedding_weights[i] = method[token]
+    embedding_weights = torch.Tensor(dataset["train"].num_rows, method.dim)
+    for i, token in enumerate(range(dataset["train"].num_rows)):
+        # Here sentences are fed in, those probably have to be cut into words somehow
+        embedding_weights[i] = method[dataset["train"][token]["text"]]
 
 
 def fit_with_kpca(data):
