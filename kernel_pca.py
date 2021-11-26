@@ -70,7 +70,7 @@ def main():
     embed(dataset, word2vec)
 
     # TODO preprocess with KPCA
-    fit_with_kpca(...)
+    # fit_with_kpca(...)
 
     # TODO compare normal embeddings to embeddings with preprocess
 
