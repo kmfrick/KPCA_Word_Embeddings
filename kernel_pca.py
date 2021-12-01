@@ -1,13 +1,16 @@
+import os.path
+
 from datasets import load_dataset
 from torchnlp import word_to_vector
 import torch
 import subprocess
 from sklearn.decomposition import PCA, KernelPCA
 
-from tokenizers.pre_tokenizers import Whitespace
+from tokenizers import Regex
+from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
 from tokenizers import Tokenizer
 from tokenizers import normalizers
-from tokenizers.normalizers import NFD, StripAccents, Lowercase
+from tokenizers.normalizers import NFD, StripAccents, Lowercase, Replace
 from tokenizers.models import WordLevel
 from tokenizers.trainers import WordLevelTrainer
 
@@ -49,11 +52,11 @@ def get_word2vec(which="fasttext"):
         return word_to_vector.CharNGram()
 
 
-def embed(dataset, method):
-    embedding_weights = torch.Tensor(dataset["train"].num_rows, method.dim)
-    for i, token in enumerate(range(dataset["train"].num_rows)):
+def embed(tokenizer, method):
+    embedding_weights = torch.Tensor(len(tokenizer.get_vocab()), method.dim)
+    for i, token in enumerate(range(len(tokenizer.get_vocab()))):
         # Here sentences are fed in, those probably have to be cut into words somehow
-        embedding_weights[i] = method[dataset["train"][token]["text"]]
+        embedding_weights[i] = method[tokenizer.decode([i])]
 
     return embedding_weights
 
@@ -63,31 +66,36 @@ def fit_with_kpca(data):
     return kpca.fit_transform(data)
 
 
-def get_vocabulary(dataset):
-    trainer = WordLevelTrainer(vocab_size=30000)
-    tokenizer = Tokenizer(WordLevel())
-    tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents()])
-    tokenizer.pre_tokenizer = Whitespace()
+def get_vocabulary(dataset, which="text", reset=False):
 
-    tokenizer.train_from_iterator(dataset["text"], trainer)
-    # TODO implement loading from this file instead of training
-    tokenizer.save("wiki.json")
+    if os.path.isfile(f'{which}.json') and not reset:
+        tokenizer = Tokenizer.from_file(f"{which}.json")
+    else:
+        trainer = WordLevelTrainer(vocab_size=1000)
+        tokenizer = Tokenizer(WordLevel())
+        tokenizer.pre_tokenizer = Sequence([Punctuation(behavior="removed"), Whitespace()])
+        regex_special_chars = Regex("[^\w\s]|[0-9]")
+        tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents(), Replace(regex_special_chars, "")])
 
-    return tokenizer.get_vocab()
+        tokenizer.train_from_iterator(dataset["text"], trainer)
+        tokenizer.save("text.json")
+
+
+    return tokenizer
 
 
 def main():
     # get a dataset first - choose from "text", "news" and "german"
     dataset = get_dataset("text")
     # tokenize the dataset -> single words from sentences
-    vocab = get_vocabulary(dataset["train"])
+    tokenizer = get_vocabulary(dataset["train"])
     # get a method for calculating a vector from words - choose from "fasttext", "glove" and "skip_gram"
     word2vec = get_word2vec("fasttext")
-    weights = embed(vocab, word2vec)
+    weights = embed(tokenizer, word2vec)
 
-    # TODO preprocess with KPCA
-    # TODO check why this wants to store multiple TB - dim probably way too big
-    # fit_with_kpca(...)
+    # preprocess with KPCA
+    # TODO it does some pca magic but I am not sure how to use this atm
+    fitted = fit_with_kpca(weights)
 
     # TODO compare normal embeddings to embeddings with preprocess
 
