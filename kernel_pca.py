@@ -55,20 +55,38 @@ def embed(dataset, method):
         # Here sentences are fed in, those probably have to be cut into words somehow
         embedding_weights[i] = method[dataset["train"][token]["text"]]
 
+    return embedding_weights
+
 
 def fit_with_kpca(data):
     kpca = KernelPCA(kernel="rbf")
     return kpca.fit_transform(data)
 
 
+def get_vocabulary(dataset):
+    trainer = WordLevelTrainer(vocab_size=30000)
+    tokenizer = Tokenizer(WordLevel())
+    tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents()])
+    tokenizer.pre_tokenizer = Whitespace()
+
+    tokenizer.train_from_iterator(dataset["text"], trainer)
+    # TODO implement loading from this file instead of training
+    tokenizer.save("wiki.json")
+
+    return tokenizer.get_vocab()
+
+
 def main():
     # get a dataset first - choose from "text", "news" and "german"
     dataset = get_dataset("text")
+    # tokenize the dataset -> single words from sentences
+    vocab = get_vocabulary(dataset["train"])
     # get a method for calculating a vector from words - choose from "fasttext", "glove" and "skip_gram"
     word2vec = get_word2vec("fasttext")
-    embed(dataset, word2vec)
+    weights = embed(vocab, word2vec)
 
     # TODO preprocess with KPCA
+    # TODO check why this wants to store multiple TB - dim probably way too big
     # fit_with_kpca(...)
 
     # TODO compare normal embeddings to embeddings with preprocess
