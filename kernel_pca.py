@@ -4,13 +4,12 @@ import torch
 import subprocess
 from sklearn.decomposition import PCA, KernelPCA
 
-
-def perl_preprocess(self, path):
-    pipe = subprocess.Popen(
-        ["perl", "./filter_datasets.pl", path], stdin=subprocess.PIPE
-    )
-    pipe.stdin.write(path)
-    pipe.stdin.close()
+from tokenizers.pre_tokenizers import Whitespace
+from tokenizers import Tokenizer
+from tokenizers import normalizers
+from tokenizers.normalizers import NFD, StripAccents, Lowercase
+from tokenizers.models import WordLevel
+from tokenizers.trainers import WordLevelTrainer
 
 
 def get_dataset(self, which="text", load_simmilar=True):
