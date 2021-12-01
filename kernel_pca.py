@@ -53,9 +53,12 @@ def get_word2vec(which="fasttext"):
 
 
 def embed(tokenizer, method):
+    """
+    manipulate this function for other embeddings. Given a tokenizer this gets
+    the vocabulary and using the method calculates a vector/weight for each entry
+    """
     embedding_weights = torch.Tensor(len(tokenizer.get_vocab()), method.dim)
     for i, token in enumerate(range(len(tokenizer.get_vocab()))):
-        # Here sentences are fed in, those probably have to be cut into words somehow
         embedding_weights[i] = method[tokenizer.decode([i])]
 
     return embedding_weights
