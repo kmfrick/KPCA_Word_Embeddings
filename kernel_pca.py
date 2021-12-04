@@ -236,7 +236,6 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
                              shuffle=False, num_workers=0, collate_fn=dataset.collate)
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
-    output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{which}.vec'
     for it in range(maxit):
         print(f'\n\n\nIteration: {it+1}')
         optimizer = torch.optim.SparseAdam(skip_gram_model.parameters(), lr=initial_lr)
@@ -258,8 +257,8 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
                     scheduler.step()
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
-        print(f' Loss: {running_loss}')
-
+                    tdata.set_postfix_str(f' Loss: {running_loss}')
+        output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{which}_{it}Epochs.vec'
         skip_gram_model.save_embedding(data.id2word, output_file_name)
 
 def main():
