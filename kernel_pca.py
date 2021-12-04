@@ -25,9 +25,7 @@ import numpy as np
 # Progress bar
 from tqdm import tqdm
 
-text_which = {'text' : 'text', 'german' : 'tokens', 'news' : 'document'}
-
-rng = np.random.RandomState(50321)
+text_which = {'text' : 'text',  'news' : 'document'}
 
 def split_if_string(s):
     try:
@@ -38,49 +36,48 @@ def split_if_string(s):
 
 def get_huggingface_dataset(which, load_similar=True):
     if not load_similar:
-        if which == "text":
-            url = "http://mattmahoney.net/dc/"
-            data_files = {"train+test": url + "text8.zip"}
-            return load_dataset("json", data_files=data_files, field="data")
+        if which == 'text':
+            url = 'http://mattmahoney.net/dc/'
+            data_files = {'train+test': url + 'text8.zip'}
+            return load_dataset('json', data_files=data_files, field='data')
 
-        elif which == "news":
-            url = "http://qwone.com/~jason/20Newsgroups/"
-            data_files = {"train+test": url + "0news-19997.tar.gz"}
-            return load_dataset("json", data_files=data_files, field="data")
+        elif which == 'news':
+            url = 'http://qwone.com/~jason/20Newsgroups/'
+            data_files = {'train+test': url + '0news-19997.tar.gz'}
+            return load_dataset('json', data_files=data_files, field='data')
 
-        elif which == "german":
-            url = "http://statmt.org/wmt14/training-monolingual-news-crawl/"
-            data_files = {"train+test": url + "news.2013.de.shuffled.gz"}
-            return load_dataset("json", data_files=data_files, field="data")
+        elif which == 'german':
+            url = 'http://statmt.org/wmt14/training-monolingual-news-crawl/'
+            data_files = {'train+test': url + 'news.2013.de.shuffled.gz'}
+            return load_dataset('json', data_files=data_files, field='data')
         else:
-            raise ValueError("Incorrect dataset name specified")
+            raise ValueError('Incorrect dataset name specified')
 
     else:
         # similar but not exact datasets
-        if which == "text":
-            return load_dataset("wikitext", "wikitext-103-raw-v1")
-        elif which == "news":
-            return load_dataset("multi_news")
-        elif which == "german":
-            return load_dataset("euronews", "de-sbb")
+        # TODO find a non-tokenized German database which is separated into sentences
+        if which == 'text':
+            return load_dataset('wikitext', 'wikitext-103-raw-v1')
+        elif which == 'news':
+            return load_dataset('multi_news')
         else:
-            raise ValueError("Incorrect dataset name specified")
+            raise ValueError('Incorrect dataset name specified')
 
 
 def get_vocabulary(dataset, which, vocab_size = 1000, reset=False):
     fname = f'{which}_{vocab_size}.json'
     if os.path.isfile(fname) and not reset:
-        print(f"Loading from {fname}...")
+        print(f'Loading from {fname}...')
         tokenizer = Tokenizer.from_file(fname)
     else:
         trainer = WordLevelTrainer(vocab_size=vocab_size)
         tokenizer = Tokenizer(WordLevel())
-        tokenizer.pre_tokenizer = Sequence([Punctuation(behavior="removed"), Whitespace()])
-        regex_special_chars = Regex("[^\w\s]|[0-9]")
-        tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents(), Replace(regex_special_chars, "")])
-        print("Training tokenizer...")
+        tokenizer.pre_tokenizer = Sequence([Punctuation(behavior='removed'), Whitespace()])
+        regex_special_chars = Regex('[^\w\s]|[0-9]')
+        tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents(), Replace(regex_special_chars, '')])
+        print('Training tokenizer...')
         tokenizer.train_from_iterator(tqdm(dataset[text_which[which]]), trainer)
-        print(f"Saving to {fname}...")
+        print(f'Saving to {fname}...')
         tokenizer.save(fname)
     return tokenizer
 
@@ -96,7 +93,7 @@ def word_similarity(s1, s2):
 
 def thresh_vocab(vocab, thresh_percent, n = 3):
     if thresh_percent > 1 or thresh_percent < 0:
-        raise ValueError("Threshold must be between 0 and 1 (100%)")
+        raise ValueError('Threshold must be between 0 and 1 (100%)')
     thresh = len(vocab) * thresh_percent
     words = Counter(vocab).most_common(thresh)
     words = zip(*words)
@@ -109,7 +106,7 @@ def similarity_vector(word_ngrams, vocab_ngrams, n = 3):
     s = np.zeros(m)
     for i in range(0, m):
         s[i] = word_similarity(word_ngrams, vocab_ngrams[i])
-        #print(f"Similarity between {word} and {vocab_ngrams[i]} is {s[i]}")
+        #print(f'Similarity between {word} and {vocab_ngrams[i]} is {s[i]}')
     return s.reshape(1, -1)
 
 
@@ -121,34 +118,26 @@ def similarity_matrix(vocab_ngrams):
     return S
 
 
-
-def kernel_vector(new_word, kpca, num_components=-1):
-    if (num_components < 0):
-        return kpca.transform(new_word)
-    else:
-        return kpca.transform(new_word)[:, :num_components]
-
-
 # Sanity check: get the kernel matrix and the k-NN of a random word, check it makes sense
-def knn_sanity_check(K, kpca, training_vocab, training_ngrams, n = 3, k = 5, num_components = 128):
+def knn_sanity_check(K, kpca, training_vocab, training_ngrams, n = 3, k = 5):
     # Run 5-NN on K
     nbrs = NearestNeighbors(n_neighbors=k)
-    nbrs.fit(K[:, :num_components])
+    nbrs.fit(K)
     # Get neighbors of a test word
-    test_word_pos = rng.randint(K.shape[0])
+    test_word_pos = np.random.randint(K.shape[0])
     test_word = training_vocab[test_word_pos]
-    print(f"test_word = {test_word}")
+    print(f'test_word = {test_word}')
     test_word_ngrams = set(get_ngrams(test_word, n))
     s_new = similarity_vector(test_word_ngrams, training_ngrams)
-    k_new = kernel_vector(s_new, kpca, num_components = num_components)
+    k_new = kpca.transform(s_new)
     neigh = nbrs.kneighbors(k_new, k)
     for i in neigh[1][0]:
         print(training_vocab[i])
 
 class DataReaderHuggingFace(DataReader):
 
-    def __init__(self, huggingface_dataset, min_count, which, mode="train"):
-        self.huggingface_dataset = huggingface_dataset
+    def __init__(self, huggingface_dataset, min_count, which, mode='train'):
+        self.sentences = []
         self.which = which
         self.mode = mode
         self.negatives = []
@@ -157,92 +146,99 @@ class DataReaderHuggingFace(DataReader):
 
         self.word2id = dict()
         self.id2word = dict()
-        self.sentences_count = 0
-        self.token_count = 0
         self.word_frequency = dict()
+        self.token_count = 0
 
-        self.read_words(min_count)
+        self.read_words(huggingface_dataset, min_count)
         self.initTableNegatives()
         self.initTableDiscards()
 
-
-    def read_words(self, min_count):
+    def read_words_untokenized(self, huggingface_dataset):
         word_frequency = dict()
-        for line in self.huggingface_dataset[self.mode]:
-            line = split_if_string(line[text_which[self.which]])
+        for line in tqdm(huggingface_dataset[self.mode][text_which[self.which]]):
             if len(line) > 1:
-                self.sentences_count += 1
+                self.sentences.append(line)
+                line = split_if_string(line)
                 for word in line:
                     if len(word) > 0:
                         self.token_count += 1
                         word_frequency[word] = word_frequency.get(word, 0) + 1
 
-                        if self.token_count % 1000000 == 0:
-                            print("Read " + str(int(self.token_count / 1000000)) + "M words.")
+        self.sentences_count = len(self.sentences)
+        return word_frequency
+
+
+    def read_words(self, huggingface_dataset, min_count):
+        words = self.read_words_untokenized(huggingface_dataset)
         wid = 0
-        for w, c in word_frequency.items():
+        for w, c in words.items():
             if c < min_count:
                 continue
             self.word2id[w] = wid
             self.id2word[wid] = w
             self.word_frequency[wid] = c
             wid += 1
-        print("Total embeddings: " + str(len(self.word2id)))
+        print('Total embeddings: ' + str(len(self.word2id)))
 
 class Word2vecDatasetHuggingFace(Word2vecDataset):
     def __init__(self, data, window_size, which):
         self.data = data
         self.which = which
         self.window_size = window_size
+        self.rng = np.random.default_rng(50321)
 
     def __len__(self):
         return self.data.sentences_count
 
     def __getitem__(self, idx):
-        while True:
-            for line in self.data.huggingface_dataset[self.data.mode]:
-                words = split_if_string(line[text_which[self.which]])
+        sentence_id = self.rng.integers(self.data.sentences_count)
+        words = self.data.sentences[sentence_id].split()
 
-                if len(words) > 1:
-                    word_ids = [self.data.word2id[w] for w in words if
-                                w in self.data.word2id and np.random.rand() < self.data.discards[self.data.word2id[w]]]
+        word_ids = [self.data.word2id[w] for w in words if
+                    w in self.data.word2id and self.rng.uniform() < self.data.discards[self.data.word2id[w]]]
 
-                    boundary = rng.randint(1, self.window_size)
-                    return [(u, v, self.data.getNegatives(v, 5)) for i, u in enumerate(word_ids) for j, v in
-                            enumerate(word_ids[max(i - boundary, 0):i + boundary]) if u != v]
+        boundary = self.rng.integers(1, self.window_size)
+        ret = [(u, v, self.data.getNegatives(v, 5)) for i, u in enumerate(word_ids) for j, v in
+                enumerate(word_ids[max(i - boundary, 0):i + boundary]) if u != v]
+        return ret
 
 
-def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, num_components, n):
+def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, n):
     min_count = 12
-    print("Creating DataReader...")
+    print('Creating DataReader...')
     data = DataReaderHuggingFace(huggingface_dataset, min_count, which)
     # Inject K into word2vec training
     m = len(data.word2id)
     print(K.shape)
-    p = num_components
+    p = K.shape[1]
     print(m, p)
     skip_gram_model = SkipGramModel(m, p)
     if (inject_kernel):
-        print("Initializing word2vec embedding layer with KPCA matrix...")
-        for i, w in tqdm(data.id2word.items()):
+        print('Initializing word2vec embedding layer with KPCA matrix...')
+        def get_similarity_vector(w):
             w_ngrams = set(get_ngrams(w, n))
             s_new = similarity_vector(w_ngrams, training_ngrams)
-            k_new = kernel_vector(s_new, kpca, num_components)
-            skip_gram_model.u_embeddings.weight.data[i, :] = torch.from_numpy(k_new)
+            return s_new
+        S_new = np.array([get_similarity_vector(w) for w in tqdm(data.id2word.items())]).squeeze()
+        print(S_new.shape)
+        K_new = kpca.transform(S_new)
+        print(K_new.shape)
+        print(skip_gram_model.u_embeddings.weight.data.shape)
+        skip_gram_model.u_embeddings.weight.data = torch.FloatTensor(K_new)
 
     # Train word2vec
     batch_size = 32
     initial_lr = 1e-3
-    maxit = 100
+    maxit = 5
     window_size = 5
     dataset = Word2vecDatasetHuggingFace(data, window_size, which)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                              shuffle=False, num_workers=0, collate_fn=dataset.collate)
     use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
-    output_file_name = f"Embeddings_{p}_Inject{inject_kernel}_{which}.vec"
+    device = torch.device('cuda' if use_cuda else 'cpu')
+    output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{which}.vec'
     for it in range(maxit):
-        print(f"\n\n\nIteration: {it+1}")
+        print(f'\n\n\nIteration: {it+1}')
         optimizer = torch.optim.SparseAdam(skip_gram_model.parameters(), lr=initial_lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(dataloader))
 
@@ -262,41 +258,40 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
                     scheduler.step()
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
-        print(f" Loss: {running_loss}")
+        print(f' Loss: {running_loss}')
 
         skip_gram_model.save_embedding(data.id2word, output_file_name)
 
 def main():
-    # get a dataset first - choose from "text", "news" and "german"
-    for which in ["text"]: #["text", "german", "news"]
+    # get a dataset first - choose from 'text', 'news' and 'german'
+    for which in ['text', 'german', 'news']:
         huggingface_dataset = get_huggingface_dataset(which)
         # tokenize the huggingface_dataset -> single words from sentences
-        tokenizer = get_vocabulary(huggingface_dataset["train"], which=which)
+        tokenizer = get_vocabulary(huggingface_dataset['train'], which=which)
         vocab = tokenizer.get_vocab()
         training_vocab = thresh_vocab(vocab, 1)
         n = 3
         training_ngrams = [set(get_ngrams(w, n)) for w in training_vocab]
 
         # Calculate similarity matrix
-        print("Calculating similarity matrix...")
+        print('Calculating similarity matrix...')
         S = similarity_matrix(training_ngrams)
         #print(S.shape)
 
         # Transform the similarity matrix using kernel PCA
-        print(f"Fitting a kernel PCA...")
-        kpca = KernelPCA(kernel="rbf")
+        print(f'Fitting a kernel PCA...')
+        kpca = KernelPCA(kernel='rbf', n_components = 128)
         K = kpca.fit_transform(S)
         #print(K.shape)
         #print(K.shape[0])
         #print(K.shape[1])
 
         # Quick sanity check using k nearest neighbors
-        num_components = 128
         k = 5
-        knn_sanity_check(K, kpca, training_vocab, training_ngrams, n, k, num_components)
+        knn_sanity_check(K, kpca, training_vocab, training_ngrams, n, k)
         for inject_kernel in True, False:
-            train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, num_components, n)
+            train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, n)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
