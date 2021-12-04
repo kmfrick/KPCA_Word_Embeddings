@@ -25,7 +25,7 @@ import numpy as np
 # Progress bar
 from tqdm import tqdm
 
-text_name = {'text' : 'text', 'german' : 'tokens'}
+text_which = {'text' : 'text', 'german' : 'tokens', 'news' : 'document'}
 
 rng = np.random.RandomState(50321)
 
@@ -79,7 +79,7 @@ def get_vocabulary(dataset, which, vocab_size = 1000, reset=False):
         regex_special_chars = Regex("[^\w\s]|[0-9]")
         tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents(), Replace(regex_special_chars, "")])
         print("Training tokenizer...")
-        tokenizer.train_from_iterator(tqdm(dataset["text"]), trainer)
+        tokenizer.train_from_iterator(tqdm(dataset[text_which[which]]), trainer)
         print(f"Saving to {fname}...")
         tokenizer.save(fname)
     return tokenizer
@@ -169,7 +169,7 @@ class DataReaderHuggingFace(DataReader):
     def read_words(self, min_count):
         word_frequency = dict()
         for line in self.huggingface_dataset[self.mode]:
-            line = split_if_string(line[text_name[self.which]])
+            line = split_if_string(line[text_which[self.which]])
             if len(line) > 1:
                 self.sentences_count += 1
                 for word in line:
@@ -201,7 +201,7 @@ class Word2vecDatasetHuggingFace(Word2vecDataset):
     def __getitem__(self, idx):
         while True:
             for line in self.data.huggingface_dataset[self.data.mode]:
-                words = split_if_string(line[text_name[self.which]])
+                words = split_if_string(line[text_which[self.which]])
 
                 if len(words) > 1:
                     word_ids = [self.data.word2id[w] for w in words if
@@ -233,7 +233,7 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
     # Train word2vec
     batch_size = 32
     initial_lr = 1e-3
-    maxit = 3
+    maxit = 100
     window_size = 5
     dataset = Word2vecDatasetHuggingFace(data, window_size, which)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
@@ -247,28 +247,28 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(dataloader))
 
         running_loss = 0.0
-        for i, sample_batched in enumerate(tqdm(dataloader)):
+        with tqdm(dataloader) as tdata:
+            for i, sample_batched in enumerate(tdata):
 
-            if len(sample_batched[0]) > 1:
-                pos_u = sample_batched[0].to(device)
-                pos_v = sample_batched[1].to(device)
-                neg_v = sample_batched[2].to(device)
+                if len(sample_batched[0]) > 1:
+                    pos_u = sample_batched[0].to(device)
+                    pos_v = sample_batched[1].to(device)
+                    neg_v = sample_batched[2].to(device)
 
-                optimizer.zero_grad()
-                loss = skip_gram_model.forward(pos_u, pos_v, neg_v)
-                loss.backward()
-                optimizer.step()
-                scheduler.step()
+                    optimizer.zero_grad()
+                    loss = skip_gram_model.forward(pos_u, pos_v, neg_v)
+                    loss.backward()
+                    optimizer.step()
+                    scheduler.step()
 
-                running_loss = running_loss * 0.9 + loss.item() * 0.1
-                if i > 0 and i % 500 == 0:
-                    print(f" Loss: {running_loss}")
+                    running_loss = running_loss * 0.9 + loss.item() * 0.1
+        print(f" Loss: {running_loss}")
 
         skip_gram_model.save_embedding(data.id2word, output_file_name)
 
 def main():
     # get a dataset first - choose from "text", "news" and "german"
-    for which in ["german", "text", "news"]:
+    for which in ["text"]: #["text", "german", "news"]
         huggingface_dataset = get_huggingface_dataset(which)
         # tokenize the huggingface_dataset -> single words from sentences
         tokenizer = get_vocabulary(huggingface_dataset["train"], which=which)

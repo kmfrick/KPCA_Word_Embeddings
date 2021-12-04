@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
@@ -10,7 +10,7 @@ id2word = dict()
 
 i = -1
 
-with open('Embeddings_128_InjectFalse_text.vec') as f:
+with open('Embeddings_128_InjectTrue_news.vec') as f:
     lines = f.readlines()
     for line in tqdm(lines):
         # Skip first line
@@ -42,13 +42,13 @@ neigh_list = neigh[1][0][1:]
 print(neigh_list)
 
 
-# Use PCA to plot 5-NN in 2D
-pca = PCA(
+# Use TSNE to plot 5-NN in 2D
+tsne = TSNE(
     n_components=2,
     random_state=50321,
 )
-print('Fitting PCA...')
-pos = pca.fit_transform(emb)
+print('Fitting TSNE...')
+pos = tsne.fit_transform(emb)
 print(pos.shape)
 
 fig = plt.figure(1)
