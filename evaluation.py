@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+import os
 
 from tqdm import tqdm
 
@@ -67,14 +68,19 @@ def cosine_similarity(vec1, vec2):
 # ------------------------------------------------------------------------------------
 # SCRIPT
 #
+files = os.listdir('.')
+for i, filename in enumerate(files):
+    print(f'({i+1}) {filename}')
+fname = files[int(input('Select a file from the list above: ')) - 1]
+print(f'Opening {fname}')
 
 i = -1
-
-with open('Embeddings_128_InjectTrue_text_4Epochs.vec') as f:
+with open(fname) as f:
     lines = f.readlines()
     for line in tqdm(lines):
         # Skip first line
         if i < 0:
+            print(line)
             m = int(line.split()[0])
             p = int(line.split()[1])
             emb = np.zeros([m, p])
@@ -99,8 +105,7 @@ results = se.eval(transfer_tasks)
 print(results)
 
 # Get neighbors of a test word
-print('Input a text word: ')
-test_word = input()
+test_word = input('Input a test word: ')
 print(f'test_word = {test_word}')
 test_id = word2id[test_word]
 print(f"the id of the input word is {test_id}")
@@ -109,12 +114,20 @@ test_embedding = emb[test_id]
 k = 5
 nbrs = NearestNeighbors(n_neighbors=k)
 nbrs.fit(emb)
-neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
-neigh_list = neigh[1][0][1:]
-neighbors = [id2word[id] for id in neigh_list]
-print(f"the 5 closest neighbors are {neighbors}")
+neigh_dist, neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
+neigh_list = np.squeeze(neigh)[1:]
+print(neigh_dist)
+print(neigh_list)
+print([id2word[i] for i in neigh_list])
 
+test_adverb = input('Input an adverb: ')
+test_adjective = input('Input the relevant adjective, e.g. apparently -> apparent: ')
+emb_adv = emb[word2id[test_adverb]]
+emb_adj = emb[word2id[test_adjective]]
+dist = np.linalg.norm(emb_adv - emb_adj)
+print(f'd({test_adverb}, {test_adjective}) = {dist}')
 
+exit()
 # Use TSNE to plot 5-NN in 2D
 tsne = TSNE(
     n_components=2,
