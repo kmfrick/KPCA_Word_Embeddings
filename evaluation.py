@@ -5,12 +5,72 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
+import sys
+import io
+
+PATH_TO_SENTEVAL = './SentEval/'
+PATH_TO_VEC = 'Embeddings_128_InjectTrue_text_4Epochs.vec'
+# import SentEval
+sys.path.insert(0, PATH_TO_SENTEVAL)
+import senteval
+
 word2id = dict()
 id2word = dict()
 
+# ------------------------------------------------------------------------------------
+# FUNCTIONS
+
+# Get word vectors from vocabulary (glove, word2vec, fasttext ..)
+def get_wordvec(path_to_vec, word2id):
+    word_vec = {}
+
+    with io.open(path_to_vec, 'r', encoding='utf-8') as f:
+        # if word2vec or fasttext file : skip first line "next(f)"
+        for line in f:
+            word, vec = line.split(' ', 1)
+            if word in word2id:
+                word_vec[word] = np.fromstring(vec, sep=' ')
+
+    return word_vec
+
+def batcher(params, batch):
+    batch = [sent if sent != [] else ['.'] for sent in batch]
+    embeddings = []
+
+    for sent in batch:
+        sentvec = []
+        for word in sent:
+            if word in params.word_vec:
+                sentvec.append(params.word_vec[word])
+        if not sentvec:
+            vec = np.zeros(params.wvec_dim)
+            sentvec.append(vec)
+        sentvec = np.mean(sentvec, 0)
+        embeddings.append(sentvec)
+
+    embeddings = np.vstack(embeddings)
+    return embeddings
+
+def prepare(params, samples, word2id=word2id):
+    params.word2id = word2id
+    params.word_vec = get_wordvec(PATH_TO_VEC, params.word2id)
+    params.wvec_dim = 128
+    return
+
+
+def cosine_similarity(vec1, vec2):
+    """
+    given 2 np.arrays -> calculate the cosine similarity value
+    """
+    similarity = vec1.dot(vec2)/ (np.linalg.norm(vec1, axis=1) * np.linalg.norm(vec2))
+    return similarity
+# ------------------------------------------------------------------------------------
+# SCRIPT
+#
+
 i = -1
 
-with open('Embeddings_128_InjectTrue_news.vec') as f:
+with open('Embeddings_128_InjectTrue_text_4Epochs.vec') as f:
     lines = f.readlines()
     for line in tqdm(lines):
         # Skip first line
@@ -26,12 +86,24 @@ with open('Embeddings_128_InjectTrue_news.vec') as f:
             id2word[i] = word
         i += 1
 
+# Set params for SentEval
+params_senteval = {'task_path': "./SentEval/data", 'usepytorch': True, 'kfold': 5}
+params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
+                                 'tenacity': 3, 'epoch_size': 2}
+
+# benchmark for semantic evaluation
+se = senteval.engine.SE(params_senteval, batcher, prepare)
+transfer_tasks = ['STS12']
+# transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
+results = se.eval(transfer_tasks)
+print(results)
+
 # Get neighbors of a test word
 print('Input a text word: ')
 test_word = input()
 print(f'test_word = {test_word}')
 test_id = word2id[test_word]
-print(test_id)
+print(f"the id of the input word is {test_id}")
 test_embedding = emb[test_id]
 # Run 5-NN on K
 k = 5
@@ -39,7 +111,8 @@ nbrs = NearestNeighbors(n_neighbors=k)
 nbrs.fit(emb)
 neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
 neigh_list = neigh[1][0][1:]
-print(neigh_list)
+neighbors = [id2word[id] for id in neigh_list]
+print(f"the 5 closest neighbors are {neighbors}")
 
 
 # Use TSNE to plot 5-NN in 2D
@@ -61,3 +134,4 @@ for j, xy in zip(neigh_list, pos[neigh_list, :]):
 plt.title(f'Neighbors of {test_word}')
 
 plt.show()
+
