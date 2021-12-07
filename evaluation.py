@@ -63,7 +63,7 @@ def cosine_similarity(vec1, vec2):
     """
     given 2 np.arrays -> calculate the cosine similarity value
     """
-    similarity = vec1.dot(vec2)/ (np.linalg.norm(vec1, axis=1) * np.linalg.norm(vec2))
+    similarity = vec1.dot(vec2)/ (np.linalg.norm(vec1) * np.linalg.norm(vec2))
     return similarity
 # ------------------------------------------------------------------------------------
 # SCRIPT
@@ -125,7 +125,9 @@ test_adjective = input('Input the relevant adjective, e.g. apparently -> apparen
 emb_adv = emb[word2id[test_adverb]]
 emb_adj = emb[word2id[test_adjective]]
 dist = np.linalg.norm(emb_adv - emb_adj)
+similarity = cosine_similarity(emb_adv, emb_adj)
 print(f'd({test_adverb}, {test_adjective}) = {dist}')
+print(f's({test_adverb}, {test_adjective}) = {similarity}')
 
 exit()
 # Use TSNE to plot 5-NN in 2D
