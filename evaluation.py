@@ -10,7 +10,7 @@ import sys
 import io
 
 PATH_TO_SENTEVAL = './SentEval/'
-PATH_TO_VEC = 'Embeddings_128_InjectTrue_text_4Epochs.vec'
+# PATH_TO_VEC = 'Embeddings_128_InjectTrue_text_4Epochs.vec'
 # import SentEval
 sys.path.insert(0, PATH_TO_SENTEVAL)
 import senteval
@@ -72,6 +72,7 @@ files = os.listdir('.')
 for i, filename in enumerate(files):
     print(f'({i+1}) {filename}')
 fname = files[int(input('Select a file from the list above: ')) - 1]
+PATH_TO_VEC = fname
 print(f'Opening {fname}')
 
 i = -1
@@ -102,7 +103,7 @@ se = senteval.engine.SE(params_senteval, batcher, prepare)
 transfer_tasks = ['STS12']
 # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
 results = se.eval(transfer_tasks)
-print(results)
+print(results["STS12"]["all"])
 
 # Get neighbors of a test word
 test_word = input('Input a test word: ')
