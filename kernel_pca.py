@@ -4,6 +4,7 @@ from datasets import load_dataset
 import subprocess
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.neighbors import NearestNeighbors
+from scipy.spatial import distance
 from torchnlp import word_to_vector
 import torch
 
@@ -21,6 +22,8 @@ from tokenizers.trainers import WordLevelTrainer
 from collections import Counter
 import nltk
 import numpy as np
+
+from itertools import chain
 
 # Progress bar
 from tqdm import tqdm
@@ -60,6 +63,8 @@ def get_huggingface_dataset(which, load_similar=True):
             return load_dataset('wikitext', 'wikitext-103-raw-v1')
         elif which == 'news':
             return load_dataset('multi_news')
+        elif which == 'german':
+            return load_dataset('german_legal_entity_recognition')
         else:
             raise ValueError('Incorrect dataset name specified')
 
@@ -74,6 +79,7 @@ def get_vocabulary(dataset, which, vocab_size = 1000, reset=False):
         tokenizer = Tokenizer(WordLevel())
         tokenizer.pre_tokenizer = Sequence([Punctuation(behavior='removed'), Whitespace()])
         regex_special_chars = Regex('[^\w\s]|[0-9]')
+        # TODO: Longer than 5 characters
         tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents(), Replace(regex_special_chars, '')])
         print('Training tokenizer...')
         tokenizer.train_from_iterator(tqdm(dataset[text_which[which]]), trainer)
@@ -229,13 +235,14 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
     # Train word2vec
     batch_size = 32
     initial_lr = 1e-3
-    maxit = 5
+    maxit = 3
     window_size = 5
     dataset = Word2vecDatasetHuggingFace(data, window_size, which)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                              shuffle=False, num_workers=0, collate_fn=dataset.collate)
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
+        # TODO: Print embeddings that only use the KPCA
     for it in range(maxit):
         print(f'\n\n\nIteration: {it+1}')
         optimizer = torch.optim.SparseAdam(skip_gram_model.parameters(), lr=initial_lr)
@@ -258,15 +265,15 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
                     tdata.set_postfix_str(f' Loss: {running_loss}')
-        output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{which}_{it}Epochs.vec'
+        output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{which}_{it+1}Epochs.vec'
         skip_gram_model.save_embedding(data.id2word, output_file_name)
 
 def main():
     # get a dataset first - choose from 'text', 'news' and 'german'
-    for which in ['text', 'german', 'news']:
+    for which in ['text', 'news']:
         huggingface_dataset = get_huggingface_dataset(which)
         # tokenize the huggingface_dataset -> single words from sentences
-        tokenizer = get_vocabulary(huggingface_dataset['train'], which=which)
+        tokenizer = get_vocabulary(huggingface_dataset['train'], which=which, vocab_size = 1000)
         vocab = tokenizer.get_vocab()
         training_vocab = thresh_vocab(vocab, 1)
         n = 3
@@ -275,15 +282,43 @@ def main():
         # Calculate similarity matrix
         print('Calculating similarity matrix...')
         S = similarity_matrix(training_ngrams)
-        #print(S.shape)
 
-        # Transform the similarity matrix using kernel PCA
-        print(f'Fitting a kernel PCA...')
-        kpca = KernelPCA(kernel='rbf', n_components = 128)
+        gridsearch = True
+        if gridsearch:
+            gamma_range_center = 1/(S.shape[0])
+            for gamma_i in range(-3, 3):
+                gamma = gamma_range_center + gamma_i * 1e-3
+                for n_components in [32, 64, 128, 256, 512]:
+                    m = S.shape[0]
+                    avg_acc = 0
+                    # Transform the similarity matrix using kernel PCA
+                    try:
+                        kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
+                        K = kpca.fit_transform(S)
+                        for i in tqdm(range(m)):
+                            for j in range(m):
+                                if i != j:
+                                    si = S[i, :]
+                                    sj = S[j, :]
+                                    cos_dist_s = distance.cosine(si, sj)
+                                    ki = K[i, :]
+                                    kj = K[j, :]
+                                    cos_dist_kernel = distance.cosine(ki, kj)
+                                    rel_err = (cos_dist_kernel - cos_dist_s) / cos_dist_s
+                                    avg_acc += np.abs(rel_err)
+                        print(f'gamma = {gamma}; n_comp = {n_components}, avg rel err = {avg_acc / (m ** 2)}')
+                    except (ValueError, np.linalg.LinAlgError) as e:
+                        print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
+                        continue
+        exit()
+
+
+        n_components = 128
+        gamma = gamma_range_center - 1e-3
+
+        print(f'Fitting a kernel PCA with {n_components} components and gamma = {gamma}')
+        kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
         K = kpca.fit_transform(S)
-        #print(K.shape)
-        #print(K.shape[0])
-        #print(K.shape[1])
 
         # Quick sanity check using k nearest neighbors
         k = 5
