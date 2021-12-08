@@ -127,11 +127,12 @@ def similarity_matrix(vocab_ngrams):
 # Sanity check: get the kernel matrix and the k-NN of a random word, check it makes sense
 def knn_sanity_check(K, kpca, training_vocab, training_ngrams, n = 3, k = 5):
     # Run 5-NN on K
+    print(K[10, :])
+    print(K[280, :])
     nbrs = NearestNeighbors(n_neighbors=k)
     nbrs.fit(K)
     # Get neighbors of a test word
-    test_word_pos = np.random.randint(K.shape[0])
-    test_word = training_vocab[test_word_pos]
+    test_word = input('test_word = ')
     print(f'test_word = {test_word}')
     test_word_ngrams = set(get_ngrams(test_word, n))
     s_new = similarity_vector(test_word_ngrams, training_ngrams)
@@ -225,12 +226,16 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
             w_ngrams = set(get_ngrams(w, n))
             s_new = similarity_vector(w_ngrams, training_ngrams)
             return s_new
-        S_new = np.array([get_similarity_vector(w) for w in tqdm(data.id2word.items())]).squeeze()
-        print(S_new.shape)
+        S_new = np.array([get_similarity_vector(w) for w in tqdm(data.id2word.values())]).squeeze()
         K_new = kpca.transform(S_new)
         print(K_new.shape)
         print(skip_gram_model.u_embeddings.weight.data.shape)
-        skip_gram_model.u_embeddings.weight.data = torch.FloatTensor(K_new)
+        print(K_new[10, :])
+        print(K_new[280, :])
+        skip_gram_model.u_embeddings.weight.data = torch.nn.Parameter(torch.FloatTensor(K_new))
+        print('Saving pure-KPCA embeddings...')
+        skip_gram_model.save_embedding(data.id2word, f'Embeddings_{p}_InjectTrue_{which}_NoTraining.vec')
+
 
     # Train word2vec
     batch_size = 32
@@ -242,10 +247,10 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
                              shuffle=False, num_workers=0, collate_fn=dataset.collate)
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
-        # TODO: Print embeddings that only use the KPCA
+    # See https://discuss.pytorch.org/t/valueerror-optimizer-got-an-empty-parameter-list-when-its-clearly-not-empty/102264/2
     for it in range(maxit):
         print(f'\n\n\nIteration: {it+1}')
-        optimizer = torch.optim.SparseAdam(skip_gram_model.parameters(), lr=initial_lr)
+        optimizer = torch.optim.SparseAdam(list(skip_gram_model.parameters()), lr=initial_lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(dataloader))
 
         running_loss = 0.0
@@ -283,9 +288,9 @@ def main():
         print('Calculating similarity matrix...')
         S = similarity_matrix(training_ngrams)
 
-        gridsearch = True
+        gamma_range_center = 1/(S.shape[0])
+        gridsearch = False
         if gridsearch:
-            gamma_range_center = 1/(S.shape[0])
             for gamma_i in range(-3, 3):
                 gamma = gamma_range_center + gamma_i * 1e-3
                 for n_components in [32, 64, 128, 256, 512]:
@@ -310,7 +315,7 @@ def main():
                     except (ValueError, np.linalg.LinAlgError) as e:
                         print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
                         continue
-        exit()
+            exit()
 
 
         n_components = 128
@@ -323,7 +328,7 @@ def main():
         # Quick sanity check using k nearest neighbors
         k = 5
         knn_sanity_check(K, kpca, training_vocab, training_ngrams, n, k)
-        for inject_kernel in True, False:
+        for inject_kernel in [True]:
             train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, n)
 
 
