@@ -37,14 +37,11 @@ from itertools import chain
 # Progress bar
 from tqdm import tqdm
 
-PATH_TO_SENTEVAL = './SentEval/'
-# PATH_TO_VEC = 'Embeddings_128_InjectTrue_text_4Epochs.vec'
+PATH_TO_SENTEVAL = '../SentEval/'
 # import SentEval
 sys.path.insert(0, PATH_TO_SENTEVAL)
 import senteval
 
-word2id = dict()
-id2word = dict()
 
 # ------------------------------------------------------------------------------------
 # FUNCTIONS
@@ -80,29 +77,23 @@ def batcher(params, batch):
     embeddings = np.vstack(embeddings)
     return embeddings
 
-def prepare(params, samples, word2id=word2id):
+def prepare(params, samples, word2id, fname):
     params.word2id = word2id
-    params.word_vec = get_wordvec(PATH_TO_VEC, params.word2id)
+    params.word_vec = get_wordvec(fname, params.word2id)
     params.wvec_dim = 128
     return
 
-
-def cosine_similarity(vec1, vec2):
-    """
-    given 2 np.arrays -> calculate the cosine similarity value
-    """
-    similarity = vec1.dot(vec2)/ (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-    return similarity
 
 def main():
 # ------------------------------------------------------------------------------------
 # SCRIPT
 #
+    word2id = dict()
+    id2word = dict()
     files = os.listdir('.')
     for i, filename in enumerate(files):
         print(f'({i+1}) {filename}')
     fname = files[int(input('Select a file from the list above: ')) - 1]
-    PATH_TO_VEC = fname
     print(f'Opening {fname}')
 
     i = -1
@@ -122,7 +113,7 @@ def main():
                 word2id[word] = i
                 id2word[i] = word
             i += 1
-    reduce_with_kpca = True
+    reduce_with_kpca = False
     if reduce_with_kpca:
         print('Building embedding matrix from training vocabulary...')
         get_caseins_key = lambda x: [i for i in word2id.keys() if i.lower() == x][0]
@@ -173,41 +164,40 @@ def main():
         emb = K_new
 
 # Set params for SentEval
-    params_senteval = {'task_path': "./SentEval/data", 'usepytorch': True, 'kfold': 5}
+    params_senteval = {'task_path': "../SentEval/data", 'usepytorch': True, 'kfold': 5}
     params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
                                      'tenacity': 3, 'epoch_size': 2}
 
 # benchmark for semantic evaluation
-    se = senteval.engine.SE(params_senteval, batcher, prepare)
+    def prep(params, samples):
+        return prepare(params, samples, word2id, fname)
+    se = senteval.engine.SE(params_senteval, batcher, prep)
     transfer_tasks = ['STS12']
 # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
     results = se.eval(transfer_tasks)
     print(results["STS12"]["all"])
 
-# Get neighbors of a test word
-    test_word = input('Input a test word: ')
-    print(f'test_word = {test_word}')
-    test_id = word2id[test_word]
-    print(f"the id of the input word is {test_id}")
-    test_embedding = emb[test_id]
 # Run 5-NN on K
     k = 5
     nbrs = NearestNeighbors(n_neighbors=k)
     nbrs.fit(emb)
-    neigh_dist, neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
-    neigh_list = np.squeeze(neigh)[1:]
-    print(neigh_dist)
-    print(neigh_list)
-    print([id2word[i] for i in neigh_list])
+# Get neighbors of a test word
+    for test_word in ['history', 'Moscow', 'linguistically', 'statistics', 'firecracker']:
+        print(f'test_word = {test_word}')
+        test_id = word2id[test_word]
+        test_embedding = emb[test_id]
+        neigh_dist, neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
+        neigh_list = np.squeeze(neigh)[1:]
+        print(neigh_list)
+        print([id2word[i] for i in neigh_list])
 
-    test_adverb = input('Input an adverb: ')
-    test_adjective = input('Input the relevant adjective, e.g. apparently -> apparent: ')
-    emb_adv = emb[word2id[test_adverb]]
-    emb_adj = emb[word2id[test_adjective]]
-    dist = np.linalg.norm(emb_adv - emb_adj)
-    similarity = cosine_similarity(emb_adv, emb_adj)
-    print(f'd({test_adverb}, {test_adjective}) = {dist}')
-    print(f's({test_adverb}, {test_adjective}) = {similarity}')
+    adjectives = ['quick', 'statistical', 'calm', 'thorough']
+    adverbs = ['quickly', 'statistically', 'calmly', 'thoroughly']
+    for test_adverb, test_adjective in zip(adverbs, adjectives):
+        emb_adv = emb[word2id[test_adverb]]
+        emb_adj = emb[word2id[test_adjective]]
+        dist = distance.cosine(emb_adv, emb_adj)
+        print(f's({test_adverb}, {test_adjective}) = {dist}')
 
     exit()
 # Use TSNE to plot 5-NN in 2D
