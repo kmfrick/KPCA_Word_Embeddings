@@ -22,55 +22,18 @@ from tokenizers.trainers import WordLevelTrainer
 from collections import Counter
 import nltk
 import numpy as np
+import re
 
 from itertools import chain
 
 # Progress bar
 from tqdm import tqdm
 
-text_which = {'text' : 'text',  'news' : 'document'}
+def get_huggingface_dataset():
+        return load_dataset('wikitext', 'wikitext-103-raw-v1')
 
-def split_if_string(s):
-    try:
-        return s.split()
-    except AttributeError:
-        return s
-
-
-def get_huggingface_dataset(which, load_similar=True):
-    if not load_similar:
-        if which == 'text':
-            url = 'http://mattmahoney.net/dc/'
-            data_files = {'train+test': url + 'text8.zip'}
-            return load_dataset('json', data_files=data_files, field='data')
-
-        elif which == 'news':
-            url = 'http://qwone.com/~jason/20Newsgroups/'
-            data_files = {'train+test': url + '0news-19997.tar.gz'}
-            return load_dataset('json', data_files=data_files, field='data')
-
-        elif which == 'german':
-            url = 'http://statmt.org/wmt14/training-monolingual-news-crawl/'
-            data_files = {'train+test': url + 'news.2013.de.shuffled.gz'}
-            return load_dataset('json', data_files=data_files, field='data')
-        else:
-            raise ValueError('Incorrect dataset name specified')
-
-    else:
-        # similar but not exact datasets
-        # TODO find a non-tokenized German database which is separated into sentences
-        if which == 'text':
-            return load_dataset('wikitext', 'wikitext-103-raw-v1')
-        elif which == 'news':
-            return load_dataset('multi_news')
-        elif which == 'german':
-            return load_dataset('german_legal_entity_recognition')
-        else:
-            raise ValueError('Incorrect dataset name specified')
-
-
-def get_vocabulary(dataset, which, vocab_size = 1000, reset=False):
-    fname = f'{which}_{vocab_size}.json'
+def get_vocabulary(dataset, vocab_size = 1000, reset=False):
+    fname = f'text_{vocab_size}.json'
     if os.path.isfile(fname) and not reset:
         print(f'Loading from {fname}...')
         tokenizer = Tokenizer.from_file(fname)
@@ -79,10 +42,9 @@ def get_vocabulary(dataset, which, vocab_size = 1000, reset=False):
         tokenizer = Tokenizer(WordLevel())
         tokenizer.pre_tokenizer = Sequence([Punctuation(behavior='removed'), Whitespace()])
         regex_special_chars = Regex('[^\w\s]|[0-9]')
-        # TODO: Longer than 5 characters
         tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents(), Replace(regex_special_chars, '')])
         print('Training tokenizer...')
-        tokenizer.train_from_iterator(tqdm(dataset[text_which[which]]), trainer)
+        tokenizer.train_from_iterator(tqdm(dataset['text']), trainer)
         print(f'Saving to {fname}...')
         tokenizer.save(fname)
     return tokenizer
@@ -143,9 +105,8 @@ def knn_sanity_check(K, kpca, training_vocab, training_ngrams, n = 3, k = 5):
 
 class DataReaderHuggingFace(DataReader):
 
-    def __init__(self, huggingface_dataset, min_count, which, mode='train'):
+    def __init__(self, huggingface_dataset, min_count, mode='train'):
         self.sentences = []
-        self.which = which
         self.mode = mode
         self.negatives = []
         self.discards = []
@@ -162,12 +123,15 @@ class DataReaderHuggingFace(DataReader):
 
     def read_words_untokenized(self, huggingface_dataset):
         word_frequency = dict()
-        for line in tqdm(huggingface_dataset[self.mode][text_which[self.which]]):
+        for line in tqdm(huggingface_dataset[self.mode]['text']):
+            line = line.lower().strip()
+            line = re.sub(' +', ' ', line)
+            line = re.sub('[^\w\s]|[0-9]', '', line)
             if len(line) > 1:
                 self.sentences.append(line)
-                line = split_if_string(line)
+                line = line.split()
                 for word in line:
-                    if len(word) > 0:
+                    if len(word) > 1:
                         self.token_count += 1
                         word_frequency[word] = word_frequency.get(word, 0) + 1
 
@@ -188,9 +152,8 @@ class DataReaderHuggingFace(DataReader):
         print('Total embeddings: ' + str(len(self.word2id)))
 
 class Word2vecDatasetHuggingFace(Word2vecDataset):
-    def __init__(self, data, window_size, which):
+    def __init__(self, data, window_size):
         self.data = data
-        self.which = which
         self.window_size = window_size
         self.rng = np.random.default_rng(50321)
 
@@ -210,10 +173,10 @@ class Word2vecDatasetHuggingFace(Word2vecDataset):
         return ret
 
 
-def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, n):
+def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, inject_kernel, n):
     min_count = 12
     print('Creating DataReader...')
-    data = DataReaderHuggingFace(huggingface_dataset, min_count, which)
+    data = DataReaderHuggingFace(huggingface_dataset, min_count)
     # Inject K into word2vec training
     m = len(data.word2id)
     print(K.shape)
@@ -234,7 +197,7 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
         print(K_new[280, :])
         skip_gram_model.u_embeddings.weight.data = torch.nn.Parameter(torch.FloatTensor(K_new))
         print('Saving pure-KPCA embeddings...')
-        skip_gram_model.save_embedding(data.id2word, f'Embeddings_{p}_InjectTrue_{which}_NoTraining.vec')
+        skip_gram_model.save_embedding(data.id2word, f'Embeddings_{p}_InjectTrue_NoTraining.vec')
 
 
     # Train word2vec
@@ -242,7 +205,7 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
     initial_lr = 1e-3
     maxit = 3
     window_size = 5
-    dataset = Word2vecDatasetHuggingFace(data, window_size, which)
+    dataset = Word2vecDatasetHuggingFace(data, window_size)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                              shuffle=False, num_workers=0, collate_fn=dataset.collate)
     use_cuda = torch.cuda.is_available()
@@ -270,66 +233,64 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
                     tdata.set_postfix_str(f' Loss: {running_loss}')
-        output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{which}_{it+1}Epochs.vec'
+        output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{it+1}Epochs.vec'
         skip_gram_model.save_embedding(data.id2word, output_file_name)
 
 def main():
-    # get a dataset first - choose from 'text', 'news' and 'german'
-    for which in ['text', 'news']:
-        huggingface_dataset = get_huggingface_dataset(which)
-        # tokenize the huggingface_dataset -> single words from sentences
-        tokenizer = get_vocabulary(huggingface_dataset['train'], which=which, vocab_size = 1000)
-        vocab = tokenizer.get_vocab()
-        training_vocab = thresh_vocab(vocab, 1)
-        n = 3
-        training_ngrams = [set(get_ngrams(w, n)) for w in training_vocab]
+    huggingface_dataset = get_huggingface_dataset()
+    # tokenize the huggingface_dataset -> single words from sentences
+    tokenizer = get_vocabulary(huggingface_dataset['train'], vocab_size = 1000)
+    vocab = tokenizer.get_vocab()
+    training_vocab = thresh_vocab(vocab, 1)
+    n = 3
+    training_ngrams = [set(get_ngrams(w, n)) for w in training_vocab]
 
-        # Calculate similarity matrix
-        print('Calculating similarity matrix...')
-        S = similarity_matrix(training_ngrams)
+    # Calculate similarity matrix
+    print('Calculating similarity matrix...')
+    S = similarity_matrix(training_ngrams)
 
-        gamma_range_center = 1/(S.shape[0])
-        gridsearch = False
-        if gridsearch:
-            for gamma_i in range(-3, 3):
-                gamma = gamma_range_center + gamma_i * 1e-3
-                for n_components in [32, 64, 128, 256, 512]:
-                    m = S.shape[0]
-                    avg_acc = 0
-                    # Transform the similarity matrix using kernel PCA
-                    try:
-                        kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
-                        K = kpca.fit_transform(S)
-                        for i in tqdm(range(m)):
-                            for j in range(m):
-                                if i != j:
-                                    si = S[i, :]
-                                    sj = S[j, :]
-                                    cos_dist_s = distance.cosine(si, sj)
-                                    ki = K[i, :]
-                                    kj = K[j, :]
-                                    cos_dist_kernel = distance.cosine(ki, kj)
-                                    rel_err = (cos_dist_kernel - cos_dist_s) / cos_dist_s
-                                    avg_acc += np.abs(rel_err)
-                        print(f'gamma = {gamma}; n_comp = {n_components}, avg rel err = {avg_acc / (m ** 2)}')
-                    except (ValueError, np.linalg.LinAlgError) as e:
-                        print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
-                        continue
-            exit()
+    gamma_range_center = 1/(S.shape[0])
+    gridsearch = False
+    if gridsearch:
+        for gamma_i in range(-3, 3):
+            gamma = gamma_range_center + gamma_i * 1e-3
+            for n_components in [32, 64, 128, 256, 512]:
+                m = S.shape[0]
+                avg_acc = 0
+                # Transform the similarity matrix using kernel PCA
+                try:
+                    kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
+                    K = kpca.fit_transform(S)
+                    for i in tqdm(range(m)):
+                        for j in range(m):
+                            if i != j:
+                                si = S[i, :]
+                                sj = S[j, :]
+                                cos_dist_s = distance.cosine(si, sj)
+                                ki = K[i, :]
+                                kj = K[j, :]
+                                cos_dist_kernel = distance.cosine(ki, kj)
+                                rel_err = (cos_dist_kernel - cos_dist_s) / cos_dist_s
+                                avg_acc += np.abs(rel_err)
+                    print(f'gamma = {gamma}; n_comp = {n_components}, avg rel err = {avg_acc / (m ** 2)}')
+                except (ValueError, np.linalg.LinAlgError) as e:
+                    print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
+                    continue
+        exit()
 
 
-        n_components = 128
-        gamma = gamma_range_center - 1e-3
+    n_components = 128
+    gamma = gamma_range_center - 1e-3
 
-        print(f'Fitting a kernel PCA with {n_components} components and gamma = {gamma}')
-        kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
-        K = kpca.fit_transform(S)
+    print(f'Fitting a kernel PCA with {n_components} components and gamma = {gamma}')
+    kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
+    K = kpca.fit_transform(S)
 
-        # Quick sanity check using k nearest neighbors
-        k = 5
-        knn_sanity_check(K, kpca, training_vocab, training_ngrams, n, k)
-        for inject_kernel in [True]:
-            train_word2vec(K, kpca, training_ngrams, huggingface_dataset, which, inject_kernel, n)
+    # Quick sanity check using k nearest neighbors
+    k = 5
+    knn_sanity_check(K, kpca, training_vocab, training_ngrams, n, k)
+    for inject_kernel in [True]:
+        train_word2vec(K, kpca, training_ngrams, huggingface_dataset, inject_kernel, n)
 
 
 if __name__ == '__main__':
