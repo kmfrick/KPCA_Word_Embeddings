@@ -4,10 +4,38 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import os
 
-from tqdm import tqdm
-
 import sys
 import io
+
+from kernel_pca import get_huggingface_dataset, get_vocabulary, thresh_vocab
+import matplotlib.pyplot as plt
+from datasets import load_dataset
+import subprocess
+from sklearn.decomposition import PCA, KernelPCA
+from sklearn.manifold import TSNE
+from sklearn.neighbors import NearestNeighbors
+from scipy.spatial import distance
+import torch
+
+from torchw2vec.word2vec.model import SkipGramModel
+from torchw2vec.word2vec.data_reader import DataReader, Word2vecDataset
+
+from tokenizers import Regex
+from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
+from tokenizers import Tokenizer
+from tokenizers import normalizers
+from tokenizers.normalizers import NFD, StripAccents, Lowercase, Replace
+from tokenizers.models import WordLevel
+from tokenizers.trainers import WordLevelTrainer
+
+from collections import Counter
+import nltk
+import numpy as np
+
+from itertools import chain
+
+# Progress bar
+from tqdm import tqdm
 
 PATH_TO_SENTEVAL = './SentEval/'
 # PATH_TO_VEC = 'Embeddings_128_InjectTrue_text_4Epochs.vec'
@@ -65,89 +93,142 @@ def cosine_similarity(vec1, vec2):
     """
     similarity = vec1.dot(vec2)/ (np.linalg.norm(vec1) * np.linalg.norm(vec2))
     return similarity
+
+def main():
 # ------------------------------------------------------------------------------------
 # SCRIPT
 #
-files = os.listdir('.')
-for i, filename in enumerate(files):
-    print(f'({i+1}) {filename}')
-fname = files[int(input('Select a file from the list above: ')) - 1]
-PATH_TO_VEC = fname
-print(f'Opening {fname}')
+    files = os.listdir('.')
+    for i, filename in enumerate(files):
+        print(f'({i+1}) {filename}')
+    fname = files[int(input('Select a file from the list above: ')) - 1]
+    PATH_TO_VEC = fname
+    print(f'Opening {fname}')
 
-i = -1
-with open(fname) as f:
-    lines = f.readlines()
-    for line in tqdm(lines):
-        # Skip first line
-        if i < 0:
-            print(line)
-            m = int(line.split()[0])
-            p = int(line.split()[1])
-            emb = np.zeros([m, p])
-        else:
-            linesp = line.split()
-            word = linesp[0]
-            emb[i] = np.array([float(w) for w in linesp[1:]])
-            word2id[word] = i
-            id2word[i] = word
-        i += 1
+    i = -1
+    with open(fname) as f:
+        lines = f.readlines()
+        for line in tqdm(lines):
+            # Skip first line
+            if i < 0:
+                print(line)
+                m = int(line.split()[0])
+                p = int(line.split()[1])
+                emb = np.zeros([m, p])
+            else:
+                linesp = line.split()
+                word = linesp[0]
+                emb[i] = np.array([float(w) for w in linesp[1:]])
+                word2id[word] = i
+                id2word[i] = word
+            i += 1
+    reduce_with_kpca = True
+    if reduce_with_kpca:
+        print('Building embedding matrix from training vocabulary...')
+        get_caseins_key = lambda x: [i for i in word2id.keys() if i.lower() == x][0]
+        S = np.array([emb[i, :] for i in tqdm([word2id[get_caseins_key(w)] for w in training_vocab])])
+        gamma_range_center = 1/(S.shape[0])
+    else:
+        gamma_range_center = 1 / 944
+    gridsearch = False
+    if gridsearch:
+        for gamma_i in range(-3, 3):
+            gamma = gamma_range_center + gamma_i * 1e-3
+            for n_components in [8, 16, 32, 64]:
+                m = S.shape[0]
+                avg_acc = 0
+                # Transform the similarity matrix using kernel PCA
+                try:
+                    kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
+                    K = kpca.fit_transform(S)
+                    for i in tqdm(range(m)):
+                        for j in range(m):
+                            if i != j:
+                                si = S[i, :]
+                                sj = S[j, :]
+                                cos_dist_s = distance.cosine(si, sj)
+                                ki = K[i, :]
+                                kj = K[j, :]
+                                cos_dist_kernel = distance.cosine(ki, kj)
+                                rel_err = (cos_dist_kernel - cos_dist_s) / cos_dist_s
+                                avg_acc += np.abs(rel_err)
+                    print(f'gamma = {gamma}; n_comp = {n_components}, avg rel err = {avg_acc / (m ** 2)}')
+                except (ValueError, np.linalg.LinAlgError) as e:
+                    print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
+                    continue
+        exit()
+    if reduce_with_kpca:
+        n_components = 16
+        gamma = gamma_range_center - 1e-3
+        print(f'Performing KPCA for dimensionality reduction to {n_components}...')
+        kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
+        kpca.fit(S)
+        print(f'Fitting on matrix S, shape = {S.shape}')
+        print(f'Transforming a matrix E, shape = {emb.shape}')
+        K_new = kpca.transform(emb)
+        print(f'Transformed a matrix K, shape = {K_new.shape}')
+        # Sanity check: print two embeddings that should be different
+        print(K_new[10, :])
+        print(K_new[280, :])
+        emb = K_new
 
 # Set params for SentEval
-params_senteval = {'task_path': "./SentEval/data", 'usepytorch': True, 'kfold': 5}
-params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
-                                 'tenacity': 3, 'epoch_size': 2}
+    params_senteval = {'task_path': "./SentEval/data", 'usepytorch': True, 'kfold': 5}
+    params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
+                                     'tenacity': 3, 'epoch_size': 2}
 
 # benchmark for semantic evaluation
-se = senteval.engine.SE(params_senteval, batcher, prepare)
-transfer_tasks = ['STS12']
+    se = senteval.engine.SE(params_senteval, batcher, prepare)
+    transfer_tasks = ['STS12']
 # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
-results = se.eval(transfer_tasks)
-print(results["STS12"]["all"])
+    results = se.eval(transfer_tasks)
+    print(results["STS12"]["all"])
 
 # Get neighbors of a test word
-test_word = input('Input a test word: ')
-print(f'test_word = {test_word}')
-test_id = word2id[test_word]
-print(f"the id of the input word is {test_id}")
-test_embedding = emb[test_id]
+    test_word = input('Input a test word: ')
+    print(f'test_word = {test_word}')
+    test_id = word2id[test_word]
+    print(f"the id of the input word is {test_id}")
+    test_embedding = emb[test_id]
 # Run 5-NN on K
-k = 5
-nbrs = NearestNeighbors(n_neighbors=k)
-nbrs.fit(emb)
-neigh_dist, neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
-neigh_list = np.squeeze(neigh)[1:]
-print(neigh_dist)
-print(neigh_list)
-print([id2word[i] for i in neigh_list])
+    k = 5
+    nbrs = NearestNeighbors(n_neighbors=k)
+    nbrs.fit(emb)
+    neigh_dist, neigh = nbrs.kneighbors(test_embedding.reshape(1, -1), k+1)
+    neigh_list = np.squeeze(neigh)[1:]
+    print(neigh_dist)
+    print(neigh_list)
+    print([id2word[i] for i in neigh_list])
 
-test_adverb = input('Input an adverb: ')
-test_adjective = input('Input the relevant adjective, e.g. apparently -> apparent: ')
-emb_adv = emb[word2id[test_adverb]]
-emb_adj = emb[word2id[test_adjective]]
-dist = np.linalg.norm(emb_adv - emb_adj)
-similarity = cosine_similarity(emb_adv, emb_adj)
-print(f'd({test_adverb}, {test_adjective}) = {dist}')
-print(f's({test_adverb}, {test_adjective}) = {similarity}')
+    test_adverb = input('Input an adverb: ')
+    test_adjective = input('Input the relevant adjective, e.g. apparently -> apparent: ')
+    emb_adv = emb[word2id[test_adverb]]
+    emb_adj = emb[word2id[test_adjective]]
+    dist = np.linalg.norm(emb_adv - emb_adj)
+    similarity = cosine_similarity(emb_adv, emb_adj)
+    print(f'd({test_adverb}, {test_adjective}) = {dist}')
+    print(f's({test_adverb}, {test_adjective}) = {similarity}')
 
-exit()
+    exit()
 # Use TSNE to plot 5-NN in 2D
-tsne = TSNE(
-    n_components=2,
-    random_state=50321,
-)
-print('Fitting TSNE...')
-pos = tsne.fit_transform(emb)
-print(pos.shape)
+    tsne = TSNE(
+        n_components=2,
+        random_state=50321,
+    )
+    print('Fitting TSNE...')
+    pos = tsne.fit_transform(emb)
+    print(pos.shape)
 
-fig = plt.figure(1)
-plt.scatter(pos[neigh_list, 0], pos[neigh_list, 1], color='turquoise')
-plt.scatter(pos[test_id, 0], pos[test_id, 1], color='red')
+    fig = plt.figure(1)
+    plt.scatter(pos[neigh_list, 0], pos[neigh_list, 1], color='turquoise')
+    plt.scatter(pos[test_id, 0], pos[test_id, 1], color='red')
 
-for j, xy in zip(neigh_list, pos[neigh_list, :]):
-    plt.annotate(id2word[j], xy = xy, textcoords='data')
+    for j, xy in zip(neigh_list, pos[neigh_list, :]):
+        plt.annotate(id2word[j], xy = xy, textcoords='data')
 
-plt.title(f'Neighbors of {test_word}')
+    plt.title(f'Neighbors of {test_word}')
 
-plt.show()
+    plt.show()
 
+if __name__ == '__main__':
+    main()
