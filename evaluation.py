@@ -1,43 +1,26 @@
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-from sklearn.manifold import TSNE
-import matplotlib.pyplot as plt
-import os
-
-import sys
-import io
-
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error
-from kernel_pca import get_huggingface_dataset, get_vocabulary, mse_scorer
-import matplotlib.pyplot as plt
+#!/usr/bin/env python
 from datasets import load_dataset
-import subprocess
-from sklearn.decomposition import PCA, KernelPCA
-from sklearn.manifold import TSNE
-from sklearn.neighbors import NearestNeighbors
+from kernel_pca import get_huggingface_dataset, get_vocabulary, mse_scorer
 from scipy.spatial import distance
-import torch
-
-from torchw2vec.word2vec.model import SkipGramModel
-from torchw2vec.word2vec.data_reader import DataReader, Word2vecDataset
-
-from tokenizers import Regex
-from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
-from tokenizers import Tokenizer
-from tokenizers import normalizers
-from tokenizers.normalizers import NFD, StripAccents, Lowercase, Replace
+from sklearn.decomposition import KernelPCA
+from sklearn.manifold import TSNE
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import GridSearchCV
+from sklearn.neighbors import NearestNeighbors
+from tokenizers import Regex, Tokenizer, normalizers
 from tokenizers.models import WordLevel
+from tokenizers.normalizers import NFD, StripAccents, Lowercase, Replace
+from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
 from tokenizers.trainers import WordLevelTrainer
-
-from collections import Counter
+from tqdm import tqdm
+import io
+import matplotlib.pyplot as plt
 import nltk
 import numpy as np
-
-from itertools import chain
-
-# Progress bar
-from tqdm import tqdm
+import os
+import subprocess
+import sys
+import torch
 
 PATH_TO_SENTEVAL = '../SentEval/'
 # import SentEval
@@ -192,6 +175,7 @@ def main():
         transfer_tasks = ['STS12']
 # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
         results = se.eval(transfer_tasks)
+        print(fname)
         print(results["STS12"]["all"])
 
 # Run 5-NN on K

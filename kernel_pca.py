@@ -1,35 +1,27 @@
-import os.path
-
+#!/usr/bin/env python
 from datasets import load_dataset
-import subprocess
-from sklearn.decomposition import KernelPCA
-from sklearn.neighbors import NearestNeighbors
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error
+from itertools import chain
 from scipy.spatial import distance
-import torch
-
-from torchw2vec.word2vec.model import SkipGramModel
-from torchw2vec.word2vec.data_reader import DataReader, Word2vecDataset
-
-
+from sklearn.decomposition import KernelPCA
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import GridSearchCV
+from sklearn.neighbors import NearestNeighbors
 from tokenizers import Regex
-from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
 from tokenizers import Tokenizer
 from tokenizers import normalizers
-from tokenizers.normalizers import NFD, StripAccents, Lowercase, Replace
 from tokenizers.models import WordLevel
+from tokenizers.normalizers import NFD, StripAccents, Lowercase, Replace
+from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
 from tokenizers.trainers import WordLevelTrainer
-
-from collections import Counter
+from torchw2vec.word2vec.data_reader import DataReader, Word2vecDataset
+from torchw2vec.word2vec.model import SkipGramModel
+from tqdm import tqdm
 import nltk
 import numpy as np
+import os.path
 import re
-
-from itertools import chain
-
-# Progress bar
-from tqdm import tqdm
+import subprocess
+import torch
 
 def get_huggingface_dataset():
         return load_dataset('wikitext', 'wikitext-103-raw-v1')
