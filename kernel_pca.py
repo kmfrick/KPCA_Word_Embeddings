@@ -2,14 +2,16 @@ import os.path
 
 from datasets import load_dataset
 import subprocess
-from sklearn.decomposition import PCA, KernelPCA
+from sklearn.decomposition import KernelPCA
 from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_squared_error
 from scipy.spatial import distance
-from torchnlp import word_to_vector
 import torch
 
 from torchw2vec.word2vec.model import SkipGramModel
 from torchw2vec.word2vec.data_reader import DataReader, Word2vecDataset
+
 
 from tokenizers import Regex
 from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
@@ -55,26 +57,23 @@ def get_ngrams(word, n = 3):
 def word_similarity(s1, s2):
     card1 = len(s1)
     card2 = len(s2)
+    # This will avoid division by zero errors for words shorter than 3 characters
+    # HOWEVER!
+    # It's fine if we don't catch one- or two-letter words that are equal
+    # We can fix that by setting the diagonal of S to ones in similarity_matrix
+    # We *want* one- or two- letter words that are not exactly the same to have similarity 0, on the other hand
+    if card1 == 0 and card2 == 0:
+        return 0
     card_int = len(s1.intersection(s2))
     return 2 * card_int / (card1 + card2)
 
 
-def thresh_vocab(vocab, thresh_percent, n = 3):
-    if thresh_percent > 1 or thresh_percent < 0:
-        raise ValueError('Threshold must be between 0 and 1 (100%)')
-    thresh = len(vocab) * thresh_percent
-    words = Counter(vocab).most_common(thresh)
-    words = zip(*words)
-    words = list(words)[0]
-    words = list(words)
-    return [w for w in words if len(w) >=3]
 
 def similarity_vector(word_ngrams, vocab_ngrams, n = 3):
     m = len(vocab_ngrams)
     s = np.zeros(m)
     for i in range(0, m):
         s[i] = word_similarity(word_ngrams, vocab_ngrams[i])
-        #print(f'Similarity between {word} and {vocab_ngrams[i]} is {s[i]}')
     return s.reshape(1, -1)
 
 
@@ -83,6 +82,8 @@ def similarity_matrix(vocab_ngrams):
     S = np.zeros([m, m])
     for i in tqdm(range(0, m)):
         S[i, :] = similarity_vector(vocab_ngrams[i], vocab_ngrams)
+    # See word_similarity()
+    np.fill_diagonal(S, np.ones(m))
     return S
 
 
@@ -236,12 +237,22 @@ def train_word2vec(K, kpca, training_ngrams, huggingface_dataset, inject_kernel,
         output_file_name = f'Embeddings_{p}_Inject{inject_kernel}_{it+1}Epochs.vec'
         skip_gram_model.save_embedding(data.id2word, output_file_name)
 
+def mse_scorer(estimator, X, y=None):
+    X_reduced = estimator.transform(X)
+    X_preimage = estimator.inverse_transform(X_reduced)
+    return mean_squared_error(X, X_preimage, squared=False) / np.mean(X)
+
+
 def main():
     huggingface_dataset = get_huggingface_dataset()
     # tokenize the huggingface_dataset -> single words from sentences
-    tokenizer = get_vocabulary(huggingface_dataset['train'], vocab_size = 1000)
-    vocab = tokenizer.get_vocab()
-    training_vocab = thresh_vocab(vocab, 1)
+    m = 1000
+    tokenizer = get_vocabulary(huggingface_dataset['train'], vocab_size = m)
+    training_vocab = tokenizer.get_vocab()
+    # Remove words shorter than three characters, because they do not convey
+    # sufficient information, therefore should not be included in the training similarity matrix
+    training_vocab = [w for w in training_vocab if len(w) >= 3]
+    m = len(training_vocab)
     n = 3
     training_ngrams = [set(get_ngrams(w, n)) for w in training_vocab]
 
@@ -249,11 +260,12 @@ def main():
     print('Calculating similarity matrix...')
     S = similarity_matrix(training_ngrams)
 
-    gamma_range_center = 1/(S.shape[0])
-    gridsearch = False
+    gamma_c = 1/m
+    gridsearch = True
     if gridsearch:
-        for gamma_i in range(-3, 3):
-            gamma = gamma_range_center + gamma_i * 1e-3
+        # Cosine reconstruction evaluation
+        for gamma_i in range(-1, 4):
+            gamma = gamma_c + gamma_i * 1e-3
             for n_components in [32, 64, 128, 256, 512]:
                 m = S.shape[0]
                 avg_acc = 0
@@ -277,10 +289,26 @@ def main():
                     print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
                     continue
         exit()
+        # NMRSE evaluation
+        param_grid = [{
+            "gamma": np.linspace(1e-6, 1e-2, 20),
+            'n_components': [32, 64, 128, 256, 512]
+        }]
+
+        kpca = KernelPCA(fit_inverse_transform = True, n_jobs = -1)
+        clf = GridSearchCV(kpca, param_grid, cv = 5, scoring = mse_scorer)
+        clf.fit(S)
+        means = clf.cv_results_["mean_test_score"]
+        stds = clf.cv_results_["std_test_score"]
+        for mean, std, params in zip(means, stds, clf.cv_results_["params"]):
+            print("%0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
+
+        exit()
+
 
 
     n_components = 128
-    gamma = gamma_range_center - 1e-3
+    gamma = gamma_c
 
     print(f'Fitting a kernel PCA with {n_components} components and gamma = {gamma}')
     kpca = KernelPCA(kernel='rbf', n_components = n_components, gamma = gamma)
