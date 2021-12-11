@@ -256,8 +256,7 @@ def main():
     gridsearch = True
     if gridsearch:
         # Cosine reconstruction evaluation
-        for gamma_i in range(-1, 4):
-            gamma = gamma_c + gamma_i * 1e-3
+        for gamma in np.linspace(1e-6, 1e-2, 20):
             for n_components in [32, 64, 128, 256, 512]:
                 m = S.shape[0]
                 avg_acc = 0
@@ -280,7 +279,6 @@ def main():
                 except (ValueError, np.linalg.LinAlgError) as e:
                     print(f'gamma = {gamma}; n_comp = {n_components}; Unfeasible PCA')
                     continue
-        exit()
         # NMRSE evaluation
         param_grid = [{
             "gamma": np.linspace(1e-6, 1e-2, 20),

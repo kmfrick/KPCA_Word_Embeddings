@@ -121,8 +121,7 @@ def main():
 
             exit()
             # Cosine reconstruction error
-            for gamma_i in range(-1, 3):
-                gamma = gamma_c + gamma_i * 1e-3
+            for gamma in np.linspace(1e-6, 1e-2, 20):
                 for n_components in [8, 16, 32, 64]:
                     m = S.shape[0]
                     avg_acc = 0
