@@ -307,7 +307,7 @@ def main():
     # Quick sanity check using k nearest neighbors
     k = 5
     knn_sanity_check(K, kpca, training_vocab, training_ngrams, n, k)
-    for inject_kernel in [True]:
+    for inject_kernel in [True, False]:
         train_word2vec(K, kpca, training_ngrams, huggingface_dataset, inject_kernel, n)
 
 

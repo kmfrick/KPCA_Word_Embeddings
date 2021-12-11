@@ -14,7 +14,6 @@ from tokenizers.pre_tokenizers import Whitespace, Punctuation, Sequence
 from tokenizers.trainers import WordLevelTrainer
 from tqdm import tqdm
 import io
-import matplotlib.pyplot as plt
 import nltk
 import numpy as np
 import os
@@ -22,7 +21,7 @@ import subprocess
 import sys
 import torch
 
-PATH_TO_SENTEVAL = '../SentEval/'
+PATH_TO_SENTEVAL = './SentEval/'
 # import SentEval
 sys.path.insert(0, PATH_TO_SENTEVAL)
 import senteval
@@ -101,7 +100,7 @@ def main():
         reduce_with_kpca = False
         if reduce_with_kpca:
             print('Building embedding matrix for words in training vocabulary...')
-            # exclude one-letter words, like we did when calculating embeddings
+            # exclude one-letter words
             S = np.array([emb[i, :] for i in tqdm([word2id[w] for w in training_vocab if len(w) > 1])])
             gamma_c = 1/(S.shape[0])
         gridsearch = False
@@ -163,7 +162,7 @@ def main():
             n_components = 128
 
 # Set params for SentEval
-        params_senteval = {'task_path': "../SentEval/data", 'usepytorch': True, 'kfold': 5}
+        params_senteval = {'task_path': "./SentEval/data", 'usepytorch': True, 'kfold': 5}
         params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
                                          'tenacity': 3, 'epoch_size': 2}
 
@@ -175,7 +174,8 @@ def main():
 # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
         results = se.eval(transfer_tasks)
         print(fname)
-        print(results["STS12"]["all"])
+        scc = results["STS12"]["all"]['spearman']['mean']
+        print(f'Spearman correlation coefficient: {scc}')
 
 # Run 5-NN on K
         k = 5
@@ -197,28 +197,7 @@ def main():
             emb_adv = emb[word2id[test_adverb]]
             emb_adj = emb[word2id[test_adjective]]
             dist = distance.cosine(emb_adv, emb_adj)
-            print(f's({test_adverb}, {test_adjective}) = {dist}')
-        perform_tsne = False
-        if perform_tsne:
-# Use TSNE to plot 5-NN in 2D
-            tsne = TSNE(
-                n_components=2,
-                random_state=50321,
-            )
-            print('Fitting TSNE...')
-            pos = tsne.fit_transform(emb)
-            print(pos.shape)
-
-            fig = plt.figure(1)
-            plt.scatter(pos[neigh_list, 0], pos[neigh_list, 1], color='turquoise')
-            plt.scatter(pos[test_id, 0], pos[test_id, 1], color='red')
-
-            for j, xy in zip(neigh_list, pos[neigh_list, :]):
-                plt.annotate(id2word[j], xy = xy, textcoords='data')
-
-            plt.title(f'Neighbors of {test_word}')
-
-            plt.show()
+            print(f'd({test_adverb}, {test_adjective}) = {dist}')
 
 if __name__ == '__main__':
     main()
