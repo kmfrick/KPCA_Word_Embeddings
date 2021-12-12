@@ -106,17 +106,17 @@ def main():
         gridsearch = False
         if gridsearch and reduce_with_kpca:
             param_grid = [{
-                "gamma": np.linspace(1e-6, 1e-2, 20),
+                'gamma': np.linspace(1e-6, 1e-2, 20),
                 'n_components': [8, 16, 32, 64]
             }]
 
             kpca = KernelPCA(fit_inverse_transform = True, n_jobs = -1)
             clf = GridSearchCV(kpca, param_grid, cv = 5, scoring = mse_scorer)
             clf.fit(S)
-            means = clf.cv_results_["mean_test_score"]
-            stds = clf.cv_results_["std_test_score"]
-            for mean, std, params in zip(means, stds, clf.cv_results_["params"]):
-                print("%0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
+            means = clf.cv_results_['mean_test_score']
+            stds = clf.cv_results_['std_test_score']
+            for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+                print('%0.3f (+/-%0.03f) for %r' % (mean, std * 2, params))
 
             exit()
             # Cosine reconstruction error
@@ -162,7 +162,7 @@ def main():
             n_components = 128
 
 # Set params for SentEval
-        params_senteval = {'task_path': "./SentEval/data", 'usepytorch': True, 'kfold': 5}
+        params_senteval = {'task_path': './SentEval/data', 'usepytorch': True, 'kfold': 5}
         params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
                                          'tenacity': 3, 'epoch_size': 2}
 
@@ -171,10 +171,9 @@ def main():
             return prepare(params, samples, emb, n_components, word2id, fname)
         se = senteval.engine.SE(params_senteval, batcher, prep)
         transfer_tasks = ['STS12']
-# transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']
         results = se.eval(transfer_tasks)
         print(fname)
-        scc = results["STS12"]["all"]['spearman']['mean']
+        scc = results['STS12']['all']['spearman']['mean']
         print(f'Spearman correlation coefficient: {scc}')
 
 # Run 5-NN on K

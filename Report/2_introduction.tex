@@ -1,0 +1,23 @@
+\subsection{Word embeddings}
+A word \emph{sense} or \emph{concept} is the meaning component of a word. The \textit{relations} between the words in a text, based on syntactic and semantic properties, allow one to \textit{understand} the text, that is to learn the meanings of the words it contains. Word, sentence, and text embeddings are a class of models that allow one to quantify these relations, by means of mapping elements of \textit{natural language} to \textit{vector spaces} and define a notion of ``distance'' or ``similarity'' between words. Despite working well on large text corpora, these methods have not proven to be able to learn meaningful semantic and syntactic relations from small datasets. In fact, they take each word as an independent input ignoring the information of the words' morphology, which could indeed be precious, especially when corpora are made of many different words. 
+The types of relations that can be observed between words are various. Two words could be found to be syntactically and semantically close when they are \textit{synonyms} or \textit{antonyms} for instance, or when one is a \textit{category} of the other. The underlying notion of \textit{word similarity} that we employ to define these relations is based on the concept of \textbf{$n$-gram}. This refers to a word subunit, built by breaking up the word into subsequences of $n$ letters. This allows for capturing subtler relations between words, like pairs or triplets of letters that indicate an adverb or an etymological root. 
+
+
+\subsection{Aim and structure}
+
+The works by Gupta et al. \cite{gupta_improving_2019} and by Raunak \cite{raunak_simple_2017} propose two different approaches to leverage the advantages of \textit{kernalization} to add this morphological enrichment to word embeddings tasks: respectively, applying Kernel PCA \textbf{\textit{ex ante}}, to enhance Word2vec's performance and reduce training time requirements in word representation learning, and \textbf{\textit{ex post}}, to perform dimensionality reduction on the learned embeddings. 
+This project builds on their proposed methodologies, expanding the scope to the following research questions:
+\begin{itemize}
+    \item Would the same increased performance that the authors of \cite{gupta_improving_2019} observe be obtained with a smaller training vocabulary size, compared to the one originally used?
+    \item How do the results in  \cite{raunak_simple_2017} vary with respect to how aggressive the dimensionality reduction is?
+    \item Are the models' performances sensitive to hyperparameter tuning on the Word2vec model? That is, can a similar improvement as that observed in \cite{gupta_improving_2019} be obtained, without any application of kernelization, by simply using an implementation of Word2vec which trains better and faster thanks to advances in optimization techniques and hyperparameter tuning?
+\end{itemize}
+
+In order to do so, we perform our analyses on the \texttt{text} dataset, available as open access from \cite{lhoest_huggingfacedatasets_2021}.
+We implement the KPCA using \texttt{scikit-learn} and leverage an implementation of  Word2vec using a different framework compared to the original studies, that is \texttt{PyTorch}. 
+We believe that this could also impact our results.
+Among the two word representation learning methods that were leveraged in \cite{gupta_improving_2019}, we make use of \textit{skip-gram} \cite{mikolov_efficient_2013}, which is considered \cite{mikolov_distributed_2013} to be better suited for finding meaningful relations even in small texts. 
+
+The paper is organized as follows: first, in section \ref{chap:previous} we review the existing literature on the topic. 
+Then, section \ref{chap:theory} provides a complete overview of the relevant theoretical framework.
+In section \ref{chap:experiments} we thoroughly report on the methods we used, and the choices we have made in the model's implementation and present our results, while the quantitative and qualitative evaluation of performance is carried out in section \ref{chap:evaluation}.

@@ -1,0 +1,22 @@
+
+In the literature there are two main strands of research concerning the usage of KPCA for word embeddings, that is using KPCA before training, as an initialization technique, and after training, to do dimensionality reduction.
+
+\subsection{Kernel PCA for morphological warm-start}
+
+Using kernel PCA before training \cite{gupta_improving_2019} aims at enriching the training with additional \textbf{morphological information}, conveyed through a word similarity matrix on which kernel PCA is performed. 
+This work builds on the well-established idea that subword information can be a great enrichment for learning relations between words in a text. 
+This is particularly relevant for those languages in which the morphological variability is very high, as in German: in such cases, predicting new words becomes a difficult task without an understanding of the underlying morphological patterns. 
+In 2016, Bojanowski et al. \cite{bojanowski_enriching_2016} proposed an extension of the \textit{skip-gram} model, which is actually based on $n$-grams instead of words. 
+
+In the same year, the authors of a probabilistic framework for word embeddings \cite{bhatia_morphological_2016} stress how using subword information at the level of single characters could lead to the identification of spurious relations, as they could pair \textit{homonyms}, words that are spelled in a similar way but have a different meaning.
+
+\subsection{Kernel PCA for dimensionality reduction}
+
+On the other hand, the use of kernel PCA after training \cite{raunak_simple_2017} builds on a geometrical study of word embedding using simple PCA \cite{mu_all-but--top_2017}.
+Across models, word embeddings have a large mean vector and most of their energy, after subtracting the mean, is located in a low-dimensional subspace.
+This means that, in principle, it would be possible to use kernel PCA to carry out effective dimensionality reduction.
+However, the authors of the study obtained mixed results when using Kernel PCA as compared to standard PCA.
+
+Finally, as an aside, we note how kernel-based methods and word embeddings are closely related.
+More recent work concerns using recurrent architectures, such as long-short-term-memory \cite{yepes_word_2017} to carry out more complex pretext tasks for word embeddings.
+It has recently been shown \cite{fermanian_framing_2021} that it's possible to frame recurrent architectures as kernel methods, which makes our approach even more interesting as relations could be drawn between what our kernelization is performing and a hypothetical recurrent architecture.

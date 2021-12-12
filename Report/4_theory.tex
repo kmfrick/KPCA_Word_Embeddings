@@ -1,0 +1,74 @@
+\subsection{High-dimensional word embeddings}
+A very simple way to define a word embedding is the canonical \emph{vector space representation}.
+Simply put, given a set of $p$ documents whose vocabulary (e.g. the set of unique words (types) used, which contains no duplicates) is composed of $n$ words, we define an embedding matrix $E \in \mathbb{R}^{n\times p}$. This matrix is such that its $i$-th row is the embedding for the $i$-th word in the vocabulary, and its entry $e_{ij}$ is 0 if and only if the $i$-th word is not present in the $j$-th document. 
+If the word is present in the document, the value is non-zero and is typically calculated as \emph{term frequency} in the document times the \emph{inverse document frequency}\cite{luhn_statistical_1957}, that is the log of the inverse of the term frequency (tf-idf) across documents.
+This means that a word has a high frequency in one document, the magnitude of the corresponding element increases, but it's offset if the term appears many times in general in the corpus.
+This kind of method to generate word embeddings encodes information that is very specific to a corpus and is therefore used commonly for information retrieval tasks such as those carried out by the backends of search engines.
+However, these are ill-suited for any kind of task where evaluating word similarity is necessary. 
+
+By defining an appropriate \textit{similarity function} $f: \mathcal{V} \times \mathcal{V} \rightarrow [0, 1]$, it is possible to compute embeddings as ``vectors of similarities'' of words in a vocabulary.
+That is, given a vocabulary $V \subset \mathcal{X}$, a word $u \in \mathcal{V}$ and a similarity function $f$ as defined above, an embedding is the vector $\mathbf{e}$ such that $e_k = f(u, v_k) \: \forall \: v_k \in V$.
+The embeddings of words in $V$ form a similarity matrix $S$ so that $s_{ij} = f(v_i, v_j) \: \forall \: v_i, v_j \in V$.
+This is a canonical representation of word embeddings which provides morphological information. 
+In highly morphological languages, such as German, morphological information is a proxy for semantic information.
+For this reason, this model for embeddings can be particularly helpful for such languages.
+\subsection{Dimensionality reduction on matrices}
+However, both tf-idf and similarity matrix embeddings heavily suffer from the \textbf{curse of dimensionality}, that is the embeddings are calculated on a very high-dimensional space, which will make for very sparse matrices with low information density.
+Many ways have been designed to tackle this issue, from random indexing \cite{karlgren_words_2001} to dimensionality reduction.
+In this work, we focus on the latter techniques.
+
+It would be possible in principle to reduce the dimensionality of the tf-idf or similarity matrix by performing simple principal component analysis (PCA).
+The basic idea of principal component analysis is to find a small number of linear combinations of the observed variables which explain most of the variation in the data.
+The keyword here is \emph{linear}: performing PCA would lead to excluding a large amount of information, as there are no geometrical constraints imposed by either tf-idf or the similarity measure used \cite{arora_latent_2016}.
+
+Kernel-based principal component analysis (kernel PCA or \textbf{KPCA}) is a kernelized version of traditional principal component analysis \cite{hastie_elements_2013}.
+As with any kernelized algorithm, KPCA allows one to make use of a similarity matrix to perform  PCA in a high-dimensional feature space \emph{implicitly}, using a kernel function.
+The feature space is chosen indirectly via the kernel function and should be chosen in such a way that the mapped data is linearly separable into arbitrary clusters.
+Since the feature map is implicit in the kernel function, the principal components are never calculated explicitly.
+Rather, what is calculated is projections of the data onto those components, be it training data or test data.
+
+\subsection{Computational considerations on KPCA}
+
+By computing KPCA on the word similarity matrix as defined above, one can compute an initial set of ``similarity-based embeddings'', which make use of the information on morphological relations encoded by the chosen similarity measure, and have reduced dimensionality.
+
+In order to reduce computation time, it is possible to perform KPCA on a similarity matrix $S$ generated from a set of words that is a \textit{subset} of the full vocabulary, or example composed by the most common words. We call this set $V$, of cardinality $|V|$, and we will refer to it as the \emph{training vocabulary}. 
+By performing KPCA on the matrix $S$, we obtain embeddings for the words that are in the training vocabulary.
+With a slight abuse of notation, we refer to the kernel PCA matrix computed on $S$ as $K = k(S)$.
+
+In order to define a complete set of vectors for all words in the full vocabulary, we compute the embedding for any word not in the vocabulary by projecting its similarity vector onto the kernel principal components.
+Since the kernel principal components reside in the feature space, it is not possible to compute them directly, but we can project arbitrary data onto them.
+
+\subsection{Machine learning for word embeddings}
+
+Word2vec \cite{mikolov_efficient_2013} is a family of model architectures and optimizations that can be used to learn word embeddings from large datasets. 
+Embeddings learned through Word2vec have proven to be successful on a variety of downstream natural language processing tasks.
+% https://neptune.ai/blog/word-embeddings-guide
+% https://adoni.github.io/2017/11/08/Word2vec-pytorch/
+Learnable embeddings are based on the concept of a \emph{pretext task}, that is learning a representation of the words by subsequent iterations of gradient descent on a loss function that expresses performance on some task we are not actually interested in.
+That is, instead of counting how often each word $v$ occurs near another word $u$, we train a classifier on a binary prediction task: ``is $v$ likely to show up near $u$?''.
+We do not actually care about this task, but we will take the learned classifier weights as the word embeddings. The embedding layer can be initialized either with random data, as is usual with weights of neural networks, or with vectors representing some kind of injected knowledge \cite{bojanowski_enriching_2016}, in which case the model is a \emph{warm-start embedding model}.
+
+Word2vec can use the \textit{skip-gram} model as a pretext task, or the \textit{continuous bag of words} model.
+To perform our analysis we employed skip-gram, since, according to the original Word2vec paper \cite{mikolov_efficient_2013}, skip-gram works well with a small amount of training data, and represents well even rare words or phrases
+Skip-grams are sentence n-grams (distinct from word n-grams, sentence n-grams are composed of words and not of letters, but the way they are built is the same) that allow tokens to be skipped. 
+A skip-gram model predicts the context (or neighbors) of a word, given the word itself.
+
+The context of a word can be represented through a set of skip-gram pairs $u_t, u_c$, where $u_c$ appears in the ``neighboring context'' of $u_t$, that is in the same sentence as $u_t$ and within a certain range.
+The context words for each of the words of a sentence are defined by a \textbf{window size}.
+The window size determines the span of words on either side of a target word that can be considered context words.
+Tuning Word2vec parameters, such as window size, learning rate, choice of optimizer etc. is outside the scope of this paper.
+We use the default parameters of the implementation we leverage, which can be shown to be optimal in practice.
+
+\subsection{KPCA for initialization and dimensionality reduction}
+
+Word2vec allows for specifying embedding dimensionality $p$ so that computed embeddings will reside in $\mathbb{R}^p$.
+To ensure that the kernel matrix can be used to initialize Word2vec, we take only the first $p$ principal components of the ``morphological word embeddings'' that result from our kernel PCA.
+It has been shown \cite{gupta_improving_2019} that initializing Word2vec embeddings of size $p$ using the $p$ kernel principal components of a word leads to more accurate embeddings since such an initialization amounts to feeding the network morphological information, then letting it infer syntactical and semantic relationships between words.
+This is the first approach we experiment with, that is \emph{performing dimensionality reduction on the word similarity matrix $S \in \mathbb{R}^{n\times n}$ and using the resulting matrix $K \in \mathbb{R}^{n \times p}$ as initialization for Word2vec embeddings}, then training Word2vec after this initialization and comparing it with random initialization of the embeddings.
+
+Furthermore, it has also been shown \cite{raunak_simple_2017} that using standard and kernel PCA is an effective way to perform dimensionality reduction on word embeddings after they have been calculated.
+This way of performing dimensionality reduction amounts to finding the components of the word embedding which are most significant in the embedding space itself (in the case of PCA) or in the feature space encoded by the implicit feature map (in the case of kernel PCA).
+This is the second approach we experiment with, that is \emph{performing dimensionality reduction on the learned embeddings matrix $E \in \mathbb{R}^{n \times p}$, obtaining a compressed matrix $E' \in \mathbb{R}^{n' \times p}, n' < n$} and evaluating the performance of these compressed embeddings.
+
+The objective of this paper is to evaluate the robustness of such approaches to changes in vocabulary size, datasets, pretext tasks, and implementation frameworks, and analyze whether they can be valuable tools to reduce the number of training epochs required for meaningful embeddings.
+

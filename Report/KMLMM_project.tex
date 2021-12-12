@@ -1,0 +1,289 @@
+%\documentclass{report}
+%\documentclass{}
+\documentclass[a4paper,times,numbered,print,index, table, xcdraw]{article}
+
+\setcounter{secnumdepth}{5}
+\setcounter{tocdepth}{5}
+
+\iffalse
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\nouppercase{\rightmark} (\nouppercase{\leftmark})}
+\chead{}
+\rhead{\thepage}
+\lfoot{}
+\cfoot{}
+\rfoot{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\renewcommand{\chaptermark}[1]{%
+\markboth{#1}{}}
+\fi
+
+\usepackage{mathtools}
+%\usepackage{balance}
+\usepackage{epsfig}
+%\usepackage[all]{xy}
+\usepackage{amsmath}
+\usepackage{array}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{color}
+\usepackage{epstopdf}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{parskip}
+\usepackage{pifont}% http://ctan.org/pkg/pifont
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{cite}
+\usepackage{setspace}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{xspace}
+\usepackage{multirow}
+\usepackage{booktabs}
+
+\lstset{ %
+  %basicstyle=\scriptsize,           % the size of the fonts that are used for the code
+  breakatwhitespace=false,          % sets if automatic breaks should only happen at whitespace
+  breaklines=true,                  % sets automatic line breaking
+  %commentstyle=\color{mygreen},    % comment style
+  %escapeinside={\%*}{*)},          % if you want to add LaTeX within your code
+  %frame=single,                    % adds a frame around the code
+  keepspaces=true,                  % keeps spaces in text, useful for keeping indentation of code (possibly needs columns=flexible)
+  keywordstyle=\color{blue},        % keyword style
+  language=C,                       % the language of the code
+  morekeywords={},                  % if you want to add more keywords to the set
+  numbers=none,                     % where to put the line-numbers; possible values are (none, left, right)
+  %numbersep=5pt,                   % how far the line-numbers are from the code
+  %numberstyle=\tiny\color{mygray}, % the style that is used for the line-numbers
+  %rulecolor=\color{black},         % if not set, the frame-color may be changed on line-breaks within not-black text (e.g. comments (green here))
+  showspaces=false,                 % show spaces everywhere adding particular underscores; it overrides 'showstringspaces'
+  showstringspaces=false,           % underline spaces within strings only
+  showtabs=false,                   % show tabs within strings adding particular underscores
+  %stepnumber=2,                    % the step between two line-numbers. If it's 1, each line will be numbered
+  %stringstyle=\color{mymauve},     % string literal style
+  tabsize=2,                        % sets default tabsize to 2 spaces
+  %title=\lstname                   % show the filename of files included with \lstinputlisting; also try caption instead of title
+}
+
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    citecolor=red,
+    filecolor=black,
+    linkcolor=blue,
+    urlcolor=blue
+}
+\usepackage{cleveref}
+
+
+\newcommand{\myparagraph}[1]{\paragraph{#1}\mbox{}\\\\}
+\newcommand{\mysubparagraph}[1]{\subparagraph{#1}\mbox{}\\\\}
+
+
+\newcommand{\toask}[1]{\textcolor{red}{(Q): #1}}
+\newcommand{\todo}[1]{\textcolor{red}{(ToDo): #1}}
+\newcommand{\tocite}{\textcolor{blue}{[citation]}}
+\newcommand{\rpm}{\raisebox{.2ex}{$\scriptstyle\pm$}}
+
+\newcommand{\dc}{\textcolor{red}{DC:}\textcolor{red}}
+\newcommand{\mm}{\textcolor{blue}{}\textcolor{blue}}
+\newcommand{\mc}{\textcolor{green}{}\textcolor{green}}
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
+
+\let\LaTeXStandardTableOfContents\tableofcontents
+
+\renewcommand{\tableofcontents}{%
+\begingroup%
+\renewcommand{\bfseries}{\relax}%
+\LaTeXStandardTableOfContents%
+\endgroup%
+}%
+
+\newcommand\citep[1]{(\cite{#1})}
+
+\begin{document}
+
+
+\begin{titlepage}
+
+\center % Center everything on the page
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+%\HRule \\[0.4cm]
+%{ \huge \bfseries Interaction between Artificial Intelligence and Computer Architecture}\\[0.4cm] % Title of your document
+%\HRule \\[1.5cm]
+
+\HRule \\[0.4cm]
+{ \huge \bfseries Kernel PCA for Word Embeddings }\\[0.4cm] % Title of your document
+%{ \huge \bfseries Leveraging Artificial Intelligence Algorithms \\ to Design Hardware Prediction Mechanisms}\\[0.4cm] % Title of your document
+\HRule \\[1.5cm]
+
+\textsc{\huge \textbf{Kernel-Based Machine Learning\\and Multivariate Modeling}}\\[1.5cm]
+
+\textsc{\huge \textbf{Half-term project}}\\[1.5cm]
+
+\textsc{\Large \textbf{Universitat Polit\`ecnica de Catalunya}}\\[1.5cm]
+
+%----------------------------------------------------------------------------------------
+%	AUTHOR & ADVISOR(S) SECTION
+%----------------------------------------------------------------------------------------
+
+\vspace{0.8cm}
+\begin{minipage}{0.4\textwidth}
+\begin{flushleft} \large
+\Large \emph{Authors:}\\[0.1cm]
+\Large Kevin Michael Frick \\
+Patrick Lutz \\
+Sonia Petrini
+
+\end{flushleft}
+\end{minipage}
+~
+\begin{minipage}{0.4\textwidth}
+\begin{flushright} \large
+\Large \emph{Supervisors:} \\[0.1cm]
+\Large Lluís A. Belanche \\
+belanche@cs.upc.edu \\[0.1cm]
+\end{flushright}
+\vspace{-1.47cm}
+\end{minipage}\\[3cm]
+
+%----------------------------------------------------------------------------------------
+%	LOGO SECTION
+%----------------------------------------------------------------------------------------
+
+
+\begin{minipage}{0.45\textwidth}
+\begin{flushright}
+    \includegraphics[width=\textwidth]{Figures/Cover/upc.jpeg}%\\[1cm] % Include a department/university logo - this will require the graphicx package
+\end{flushright}
+\end{minipage}
+
+\vspace{1.5cm}
+
+%----------------------------------------------------------------------------------------
+%	DATE SECTION
+%----------------------------------------------------------------------------------------
+
+{\large \today}\\[2cm] % Date, change the \today to a set date if you want to be precise
+
+%----------------------------------------------------------------------------------------
+
+\vfill % Fill the rest of the page with whitespace
+
+\end{titlepage}
+
+%\onehalfspacing
+%\setlength{\parskip}{0.5cm plus4mm minus3mm}
+
+%\tableofcontents
+%\listoftables
+%\listoffigures
+
+%\clearpage
+
+\thispagestyle{plain}
+
+\section{Abstract}
+\label{chap:abstract}
+\input{1_abstract}
+
+\section{Introduction}
+\label{chap:intro}
+\input{2_introduction}
+
+\section{Previous work}
+\label{chap:previous}
+\input{3_previous_work}
+
+\section{Theoretical background}
+\label{chap:theory}
+\input{4_theory}
+
+\section{Experiments}
+\label{chap:experiments}
+\input{6_experiments}
+
+\section{Evaluation}
+\label{chap:evaluation}
+\input{7_evaluation}
+
+\section{Conclusions}
+\label{chap:conclusions}
+\input{8_conclusions}
+
+\pagebreak
+\appendix
+\input{appendix}
+
+\pagebreak
+\bibliographystyle{abbrv}
+%\balance
+\bibliography{ref}
+
+\end{document}
+
+% TODO
+% - Previous work on kernels for NLP ◊
+% - Use just KPCA as embeddings and see what happens ◊
+% - Do a gridsearch on KPCA parameters ◊
+% - Constrain word length ◊ --> future work
+% - first most frequent then we removed less than 3 char ◊
+% - 5 folds ◊
+% - Write abstract  ◊
+% - write future work  ◊
+% - info on data (size?)  ◊
+% - caption figures  ◊
+
+
+
+% ---- BELANCHE'S SUGGESTIONS -----
+
+%% TODO
+% sqrt of distance (Tab 3) ◊
+% captions! should describe clearly what tables/figures show ◊
+% fix tables on sp correlation  ◊
+% state questions clarly in intro (Hypothesis) ◊
+% answer to research questions in conclusion 
+
+
+%%% NOTES
+% dot products are affected by dimensionality
+% if you fit can you underfit or overfit?
+% we care more about quick fit than accuracy
+% careful not to generalize our results too much
+% preprocess after data resampling
+% if you formally define sth, then you should use it
+
+
+%% FUTURE WORK
+% dimens reduction on sentences
+% what is the final application? --> best method depends on this
+% different similarity measures
+% different kernels?
+% Constrain word length
+
+%% WHAT TO EVALUATE
+% number of hyperpars
+% popssibility of doing feature selection
+% computational cost of every run
+% interpretability in addition to predictive performance
+% --> understand rules
+
+
+%-% Methodological Correctness
+% global idea makes sense
+% don't make any flaw

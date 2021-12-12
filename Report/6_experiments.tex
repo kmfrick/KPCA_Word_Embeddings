@@ -1,0 +1,391 @@
+
+To test our hypotheses we use the \texttt{text} dataset - available as open access from \cite{lhoest_huggingfacedatasets_2021} - composed of English Wikipedia articles.
+Before performing any operation we tokenize it with the default options of the tokenizer proposed by \cite{wolf-etal-2020-transformers}, removing numbers, symbols, punctuation, and special characters. 
+We also lowercase every token in order not to identify spurious morphological rules, emerging from the same word being spelled in different cases. 
+In \cref{table:data} we display information on our dataset, and on the smallest one considered by \cite{gupta_improving_2019}.
+
+
+\begin{table}[h!]
+
+\centering
+
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+Corpus & Corpus size & Training vocabulary size \\ \hline
+\cellcolor[HTML]{C0C0C0} text & $\approx$ 1 million &  1000\\ \hline
+\cellcolor[HTML]{C0C0C0} 20Newsgroups & $\approx$ 1 million & 10.000\\ \hline
+\end{tabular}
+\caption{Corpus and training vocabulary sizes, for our considered dataset (\texttt{text}) and the smallest corpus in \cite{gupta_improving_2019}.}
+\label{table:data}
+\end{table}
+
+
+\subsection{KPCA for warm start}
+To evaluate the first approach, we follow \cite{gupta_improving_2019} for the ex-ante usage of KPCA and leverage the \textbf{$n$-gram similarity} defined in \cref{eq:ngramsim}, where $G_1, G_2$ are the sets of $n$-grams of the two words:
+
+\begin{equation}
+    s(G1, G2) = \frac{2 | G_1 \cap G_2 |}{|G_1| + |G_2|}
+    \label{eq:ngramsim}
+\end{equation}
+
+As for the choice of the kernel function $k(\cdot)$, we make use of the \textbf{Gaussian kernel}, also known as RBF kernel. We perform kernel PCA on $S$ and define our kernel matrix $K = k(S)$ so that $k_{ij} = k(\mathbf{s}_i, \mathbf{s}_j) =  \exp(-\gamma\|\mathbf{s}_i - \mathbf{s}_j\|^2)$. The kernel principal components will therefore encode the notion of morphological similarity. 
+
+\subsubsection{Hyperparameters Tuning}
+In \cite{gupta_improving_2019}, the authors set the kernel parameter to $\gamma_C = \frac{1}{|V|}$. However, they do not report on doing any optimization to tune this value.
+Thus, to assess if this is indeed a good choice, we perform a \textbf{grid search} on the $\gamma$ kernel parameter, evaluating it against different embedding dimensionalities.
+We use as our evaluation metric the \emph{relative error on squared cosine distance}.
+That is, we take all possible pairs of word embeddings and calculate the \emph{squared cosine distance} among the two rows $s_i, s_j$ of $S$ and the two rows $k_i, k_j$ of $K$.
+This results in two squared distance measures $d^2_{s} = 1 - \frac{<s_i, s_j>}{\|s_i\|\|s_j\|}, d^2_{k} = 1 - \frac{<k_i, k_j>}{\|k_i\|\|k_j\|}$.
+The reason why we use \textit{cosine distance} as a benchmark, is that in high-dimensional spaces the Euclidean distance between two terms may be high, while their vector representations are actually pointing in the same direction. It is known that the \textit{cosine distance} would also be distorted by a very high number of dimensions, but this effect should be minimal for the dimensionalities we are considering.
+So, taking $d^2_{s}$ as the distance which encodes the most information and $d^2_k$ as an ``estimate'' of it,  we calculate the relative error as 
+
+\begin{equation}
+    \eta = \frac{|d^2_{k} - d^2_{s}|}{d^2_{s}}
+\end{equation}
+
+and then take the average out of all the values. We test parameters in the interval $[10^{-6}, 10^{-2}]$, and we compare the performance of each of these values for a range of dimensionalities, defined as $[32,64,128,256,512]$. 
+This results in the parameter grid in \cref{table:cos-err-kpre}. 
+N/A values correspond to cases in which a kernel PCA could not be computed due to numerical issues.
+As we can see, according to this measure, performing kernel PCA on our training vocabulary similarity matrix $S$ seems to be relatively \textit{insensitive} to the choice of $\gamma$.
+We therefore pick $\gamma = \frac{1}{|V|}$ as in \cite{gupta_improving_2019}.
+
+
+%% OK 02.07
+\begin{table}[h!]
+
+\centering
+
+\begin{tabular}{|l|l|l|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+$(\gamma, p)$ & 32 &  64 &  128 &  256 &  512 \\ \hline
+\cellcolor[HTML]{C0C0C0}$10^{-6}$& 0.195 & 0.107 & 0.056 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0005$&0.195 & 0.107 & 0.056 & 0.031 & N/A\\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0011$&0.195 & 0.107 & 0.056 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0016$&0.195 & 0.107 & 0.056 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0021$&0.196 & 0.107 & 0.056 & 0.031 & N/A\\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0026$&0.196 & 0.108 & 0.056 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0032$&0.196 & 0.108 & 0.057 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0037$&0.196 & 0.108 & 0.057 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0042$&0.196 & 0.108 & 0.057 & 0.031 & 0.017 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0047$&0.196 & 0.108 & 0.057 & 0.031 & N/A\\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0053$&0.196 & 0.108 & 0.057 & 0.031 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0057$&0.197 & 0.108 & 0.057 & 0.031 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0063$&0.197 & 0.109 & 0.057 & 0.032 & N/A\\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0068$&0.197 & 0.109 & 0.057 & 0.032 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0074$&0.197 & 0.109 & 0.057 & 0.032 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0079$&0.197 & 0.109 & 0.057 & 0.032 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0084$&0.197 & 0.109 & 0.057 & 0.032 & N/A\\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0089$&0.197 & 0.109 & 0.057 & 0.032 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$0.0095$&0.197 & 0.109 & 0.058 & 0.032 & 0.018 \\ \hline
+\cellcolor[HTML]{C0C0C0}$10^{-2}$&0.197 & 0.109 & 0.058 & 0.032 & 0.018 \\ \hline
+\end{tabular}
+
+\caption{\textit{Ex-ante} KPCA: \textbf{grid search} for $\gamma$ parameter of kernel function, scored according to relative error in squared \textit{cosine distance} between the same pair of words, in the original similarity matrix (S) and in the Kernel matrix (K). The lower, the better.}
+\label{table:cos-err-kpre}
+\end{table}
+
+ 
+Although we deliberately did not perform \textbf{cross-validation}, since our purpose is fitting the studied corpus the best we can, over-fitting the information contained in the training vocabulary is still a risk. Thus, we implement this procedure with a number of folds equal to 5: however, using relative error on cosine distance as an evaluation metric is problematic in this situation, since many zero-vectors can appear in the case of words in the test fold that have no $n$-grams in common with any of the words in the training folds. This does not happen when the whole matrix is evaluated, since every vector has at least one non-zero element, corresponding to the value of the word's similarity to itself, that is 1.
+
+We therefore review the relevant literature and find \cite{alam_hyperparameter_2014} that a metric that can be used for cross-validation on kernel PCA is the \textbf{reconstruction error}.
+The reconstruction error is calculated after fitting a kernel PCA, by attempting to reconstruct the source data using only the first $p$ kernel principal components, and calculating the mean squared error between this reconstruction and the original matrix \cite{mika_fisher_1999}.
+
+Again, we test 20 equally spaced values of $\gamma$ in the interval $[10^{-6}, 10^{-2}]$.
+We calculate the root of the MSE and normalize it by dividing it by the mean value of $S$, obtaining the normalized root-mean-square-error (NRMSE).
+This search confirms our hypothesis on the low sensitivity to this hyperparameter, resulting in the same array of NRMSE values regardless of the value of $\gamma$, which we report in \cref{table:nmrse-pre}.
+For the sake of clarity, we round our values to the fourth decimal digit.
+
+
+%% OK 01.09
+\begin{table}[h!]
+
+\centering
+
+\begin{tabular}{|l|l|l|l|l|l|l|l|l|l|l|l|l|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+Dimensionality & 32 & 64 & 128 & 256 & 512 \\ \hline
+NRMSE & 6.132 & 5.349 & 4.440 & 3.419 & 2.863 \\ \hline
+\end{tabular}
+\caption{\textit{Ex-ante} KPCA: \textbf{cross-validated grid search}, for embedding dimensionality and $\gamma$ parameter, according to normalized root-mean-squared reconstruction error . The values are the same for the 20 values of $\gamma$ we tried. (lower is better)}
+\label{table:nmrse-pre}
+\end{table}
+ 
+In \cref{fig:scree_ante} we show a scatter plot of the reconstruction NRMSE for the different dimensionality values.
+We can observe how reconstruction NRMSE initially decreases steeply, to then become flatter: the breakpoint seems to be at 128 components, after which the increase in dimensionality is greater than the gain in accuracy. Hence, the authors' choice of retaining 128 components seems a reasonable compromise between error and variance.
+
+\subsubsection{Training}
+
+To train Word2vec, we use the sparse Adam optimizer with a cosine annealing law of learning rate decay, as proposed in \cite{loshchilov_sgdr_2016}. 
+As a reminder, we are testing the robustness of the architectures proposed in \cite{gupta_improving_2019} with a different, more time-efficient implementation of Word2vec\footnote{\url{https://github.com/Andras7/Word2vec-pytorch}} and a smaller vocabulary. To do so, we perform KPCA on a similarity matrix generated using the 1000 most common words in the dataset. Notice that, after we select these 1000 words, we apply a filter to remove occurrences with less than 3 letters, due to our similarity measure being based on \textit{3-grams}.
+
+We train Word2vec initializing the embeddings with either our computed KPCA-based embeddings representing morphological similarity or random data uniformly distributed in $[-\frac{1}{p}, \frac{1}{p}]$. Both times, the model is trained for 3 epochs on the entire training set using the skip-gram model as a pretext task.
+To conceive a qualitative idea of the obtained embeddings, in \cref{table:5nn-1k-pre}, we show the \textbf{5 Nearest Neighbors} of 5 different words - chosen for illustrative purposes - as identified by the KPCA-initialized and the random-initialized Word2vec, for different training times. 
+
+%% OK 02.19
+
+\begin{table}[h!]
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+\textbf{Word}  & \textbf{Model}          & \textbf{5-NN} \\ \hline
+history &       KPCA, no further training & 'story', 'historia', 'tory', 'prehistory', 'storz'\\ \hline 
+history        & KPCA, 1 epoch & 'era', 'compiled', 'sporting', 'eighteenth', 'achievements'\\ \hline
+history        & KPCA, 3 epochs & 'milestone', 'selborne', 'histories', 'arguably', 'milestones'\\ \hline
+history        & Word2vec, 1 epoch      &'era', 'compiled', 'sporting', 'achievements', 'chess' \\ \hline
+history        & Word2vec, 3 epochs       &'selborne', 'histories', 'milestones', 'milestone', 'triumphs' \\ \hline
+moscow         & KPCA, no further training & 'moscoso', 'discos', 'mosley', 'deimos', 'mimosa' \\ \hline
+moscow         & KPCA, 1 epoch & 'vienna', 'luxembourg', 'warsaw', 'czechoslovakia', 'buenos'\\ \hline
+moscow         & KPCA, 3 epochs & 'munich', 'zürich', 'prague', 'bucharest', 'warsaw' \\ \hline
+moscow         & Word2vec, 1 epoch      & 'vienna', 'luxembourg', 'warsaw', 'munich', 'czechoslovakia'\\ \hline
+moscow         & Word2vec, 3 epochs       & 'prague', 'zürich', 'munich', 'bucharest', 'zurich' \\ \hline
+linguistically & KPCA, no further training & 'recalling', 'hallingskeid', 'victualling', 'pallingham', 'footballing'\\ \hline
+linguistically & KPCA, 1 epoch & 'equine', 'homotopy', 'coexisted', 'evolutionarily', 'qualitative'\\ \hline
+linguistically & KPCA, 3 epochs & 'polytheistic', 'abrahamic', 'shaivism', 'daoism', 'cognates'\\ \hline
+linguistically & Word2vec, 1 epoch      &'equine', 'salvia', 'coexisted', 'homotopy', 'psychoactive' \\ \hline
+linguistically & Word2vec, 3 epochs     & 'polytheistic', 'shaivism', 'daoism', 'usages', 'heathens'\\ \hline
+statistics     & KPCA, no further training & 'statistic', 'ecstatic', 'statistician', 'batista', 'statisticians'\\ \hline
+statistics     & KPCA, 1 epoch & 'statistical', 'nationally', 'competitive', 'selection', 'scholarships'\\ \hline
+statistics     & KPCA, 3 epochs & 'statistical', 'statistic', 'stats', 'cumulative', 'statistically'\\ \hline
+statistics     & Word2vec, 1 epoch     & 'statistical', 'competitive', 'nationally', 'eligibility', 'unprecedented'\\ \hline
+statistics     & Word2vec, 3 epochs       & 'statistical', 'statistic', 'stats', 'cumulative', 'milestones'\\ \hline
+firecracker    & KPCA, no further training & 'firecrackers', 'backfire', 'adirondacks', 'adirondack', 'dirac'\\ \hline
+firecracker    & KPCA, 1 epoch & 'pushy', 'neologisms', 'rumba', 'moppet', 'munsey' \\ \hline
+firecracker    & KPCA, 3 epochs & 'mashing', 'shrieking', 'jackhammer', 'jittery', 'disarmingly' \\ \hline
+firecracker    & Word2vec, 1 epoch      &'marcas', 'congreve', 'opiate', 'inheritances', 'humourless' \\ \hline
+firecracker    & Word2vec, 3 epochs       & 'jittery', 'mashing', 'jackhammer', 'outshines', 'shrieking' \\ \hline
+\end{tabular}
+\caption{\textit{Ex-ante} KPCA: Comparison of KPCA-initalized and random-initialized Word2vec in identifying \textbf{5 Nearest Neighbors} of a set of words, using embeddings in $\mathbb{R}^{128}$. Results are shown for different training epochs, namely 0 (for KPCA), 1, and 3.}
+\label{table:5nn-1k-pre}
+\end{table}
+
+Furthermore, we evaluate the performance of our embeddings in a \textbf{word matching} task,  similar to that carried out in \cite{mikolov_efficient_2013}, that is minimizing the distance between words that are related in meaning but serve different syntactical purposes. For the purposes of this work, we pick cosine distance in \textit{adjective-adverb} pairs. We report our findings in \cref{table:synmatch-1k-pre} and \cref{fig:cos_dist_ante}.
+
+Finally, we also perform a quantitative evaluation of injecting morphological knowledge obtained by fitting a kernel PCA. We use the framework in \cite{conneau_senteval_2018}, which tests the performance of the computed word embeddings using different semantic textual similarity (STS) tasks, then calculates the \textbf{Spearman correlation coefficient} between the metrics obtained by our embeddings and those computed by state-of-the-art models. A higher correlation coefficient means our embeddings are closer to the state of the art. 
+
+We report our results in \cref{table:quant-1k-pre}.
+
+%% OK 02.19
+
+\begin{table}[H]
+
+\centering
+
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+\textbf{Pair}  & \textbf{Model}          & \textbf{Squared Cosine Distance}                                                             \\ \hline
+quick, quickly & KPCA, no further training & 0.0004\\ \hline
+quick, quickly & KPCA, 1 epoch & 0.496\\ \hline
+quick, quickly & KPCA, 3 epochs & 0.690\\ \hline
+quick, quickly & Word2vec, 1 epoch & 0.494\\ \hline
+quick, quickly & Word2vec, 3 epochs & 0.679\\ \hline
+statistical, statistically & KPCA, no further training & 0.199\\ \hline
+statistical, statistically & KPCA, 1 epoch & 0.222\\ \hline
+statistical, statistically & KPCA, 3 epochs & 0.334\\ \hline
+statistical, statistically & Word2vec, 1 epoch & 0.228\\ \hline
+statistical, statistically & Word2vec, 3 epochs & 0.356\\ \hline
+calm, calmly & KPCA, no further training & 0.003 \\ \hline
+calm, calmly & KPCA, 1 epoch & 0.176\\ \hline
+calm, calmly & KPCA, 3 epochs &0.434 \\ \hline
+calm, calmly & Word2vec, 1 epoch & 0.195\\ \hline
+calm, calmly & Word2vec, 3 epochs & 0.425\\ \hline
+thorough, thoroughly & KPCA, no further training & 0.0002\\ \hline
+thorough, thoroughly & KPCA, 1 epoch & 0.138\\ \hline
+thorough, thoroughly & KPCA, 3 epochs & 0.530\\ \hline
+thorough, thoroughly & Word2vec, 1 epoch & 0.150\\ \hline
+thorough, thoroughly & Word2vec, 3 epochs & 0.543\\ \hline
+\end{tabular}
+\caption{\textit{Ex-ante} KPCA: Comparison of KPCA-initalized and random-initialized Word2vec in \textbf{word matching tasks}: adjective-adverb matching, scored according to squared cosine distance (lower is better).}
+\label{table:synmatch-1k-pre}
+\end{table}
+
+
+%% OK 02.19
+
+\begin{table}[h]
+
+\centering
+
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+\textbf{Model}          & \textbf{Spearman correlation coefficient} \\ \hline
+KPCA warm-start, no further training & 0.307 \\ \hline
+KPCA warm-start, 1 epoch & 0.445 \\ \hline
+Word2vec, 1 epoch & 0.447 \\ \hline
+KPCA warm-start, 2 epochs  & 0.481 \\ \hline
+Word2vec, 2 epochs &  0.490 \\ \hline
+KPCA warm-start, 3 epochs &  0.508 \\ \hline
+Word2vec, 3 epochs & 0.518\\ \hline
+\end{tabular}
+\caption{\textit{Ex-ante} KPCA: Comparison of KPCA-initalized and random-initialized Word2vec in \textbf{Spearman correlation coefficient} (higher is better).}
+\label{table:quant-1k-pre}
+\end{table}
+
+From the table, a flaw emerges in the tokenizer we used: ``zurich'' and ``zürich'' are considered as being different words.
+Even though we specified to the tokenizer that it should strip accents, it deliberately did not consider umlauts as accents, nor does the tokenizer provide an option to explicitly strip umlauts.
+However, the choice of the tokenizer's programmers makes sense in the context of a tokenizer that is to be used on many different languages.
+In languages such as German, minimal pairs exist that differ in meaning while their spelling only differs because of an umlaut.
+It is the case, for example, of ``Apfel'' (apple, singular) and ``Äpfel'' (apples, plural).
+
+\subsection{KPCA for dimensionality reduction}
+
+We choose the RBF kernel as our function to perform kernel PCA dimensionality reduction on Word2vec embeddings, trained with a cold start.
+In order to reduce computation time, we perform kernel PCA on a training vocabulary $V$ and then project the results, as we did in the previous experiment; therefore, we use the same interval on $\gamma$ as before for our grid search.
+We start from embeddings in $\mathbb{R}^{128}$ and grid search for the kernel parameter, leveraging the same two evaluation metrics as before (cosine similarity on the whole dataset, and NRMSE for cross-validation), but a more aggressive dimensionality reduction. The results are shown in the parameter grids in \cref{table:cos-err-kpost} and \cref{table:nmrse-post}. 
+Once again, the kernel PCA seems to be insensitive to the parameter $\gamma$, and we therefore pick $\gamma = 1/|V|$.
+In \cref{table:cos-err-kpost}, we report values for the grid search performed on embeddings obtained after three epochs. 
+Values for embeddings obtained after fewer epochs confirm our findings about a low sensitivity to hyperparameters and are not reported for the sake of clarity.
+
+We deem NRMSE search more informative since values are exactly the same across values of $\gamma$, similarly to what happens with relative error on squared cosine distance, but change significantly with the aggressiveness of dimensionality reduction and across epochs.
+Therefore, we are able to plot NRMSE against dimensionality in \cref{fig:scree_post} in order to draw conclusions about the effectiveness of dimensionality reduction. The NRMSE search on dimensionality, combined with \cref{fig:scree_post}, highlights how 16 would be a reasonable choice for the number of dimensions to retain when only one epoch of training is allowed.
+
+%% OK 01.09
+\begin{table}[H]
+
+\centering
+
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+Dimensionality & 8 & 16 & 32 & 64  \\ \hline
+\cellcolor[HTML]{C0C0C0}Relative error in squared cosine distance & 0.276 & 0.182 & 0.120 & 0.083 \\ \hline
+\end{tabular}
+
+\caption{\textit{ex-post} KPCA: \textbf{grid search} for $\gamma$ parameter of kernel function, scored according to relative error in squared \textit{cosine distance} between the same pair of words, in the original embedding matrix (E) and in the Kernel matrix (K). These values are the same for the 20 equally-spaced values of $\gamma \in [10^{-6}, 10^{-2}]$}
+\label{table:cos-err-kpost}
+\end{table}
+
+
+
+
+
+
+
+%% OK 01.09
+\begin{table}[h!]
+
+\centering
+
+\begin{tabular}{|l|l|l|l|l|l|l|l|l|l|l|l|l|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+Dimensionality & 8 & 16 & 32 & 64  \\ \hline
+\cellcolor[HTML]{C0C0C0}NRMSE, 1 epoch & 13.5 & 11.5 & 9.59 & 8.27  \\ \hline
+\cellcolor[HTML]{C0C0C0}NRMSE, 2 epochs & 15.4 & 14.0 & 12.0 & 9.0  \\ \hline
+\cellcolor[HTML]{C0C0C0}NRMSE, 3 epochs & 17.8 & 16.5 & 14.8 & 11.7  \\ \hline
+
+\end{tabular}
+\caption{Normalized root-mean-squared error obtained with each embedding dimensionality, for models trained for a different amount of epochs. The values are the same for the 20 values of $\gamma$ we tried.}
+\label{table:nmrse-post}
+\end{table}
+
+We perform KPCA to do dimensionality reduction of the embeddings to $\mathbb{R}^k, k \in \{8, 16, 32, 64\}$ and report an evaluation table based on the 5 nearest neighbors in \cref{table:5nn-1k-post}. We also report our finding on adjective-adverb matching in \cref{table:synmatch-post}. Finally, in \cref{table:quant-1k-post} we display a quantitative comparison table that uses the same tasks as our ex-ante KPCA, analyzing how different degrees of dimensionality reduction affect the performance of our model.
+
+%% OK 01.40
+
+\begin{table}[h]
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+\textbf{Word}  & \textbf{Model}          & \textbf{5-NN}                                                             \\ \hline
+% history & KPCA in $\mathbb{R}^{8}$ & 'era', 'biennial', 'usila', 'polled', 'bantam'\\ \hline
+history & KPCA in $\mathbb{R}^{16}$ & 'era', 'bantam', 'eclipsed', 'seventeenth', 'calendar' \\ \hline
+% history & KPCA in $\mathbb{R}^{32}$ & 'olympiad', 'preeminent', 'milestone', 'arguably', 'accomplishments'\\ \hline
+% history & KPCA in $\mathbb{R}^{64}$ &  'milestones', 'milestone', 'selborne', 'histories', 'significance'\\ \hline
+history & Original in $\mathbb{R}^{128}$ & 'selborne', 'histories', 'milestones', 'milestone', 'triumphs'\\ \hline
+% moscow & KPCA in $\mathbb{R}^{8}$ & 'luxembourg', 'triumvirate', 'alliance', 'takeover', 'zürich'\\ \hline
+moscow & KPCA in $\mathbb{R}^{16}$ & 'zürich', 'petrograd', 'yalta', 'zurich', 'munich' \\ \hline
+% moscow & KPCA in $\mathbb{R}^{32}$ & 'munich', 'prague', 'zürich', 'zurich', 'bucharest'\\ \hline
+% moscow & KPCA in $\mathbb{R}^{64}$ & 'prague', 'munich', 'zürich', 'bucharest', 'warsaw' \\ \hline
+moscow & Original in $\mathbb{R}^{128}$ & 'prague', 'zürich', 'munich', 'bucharest', 'zurich'\\ \hline
+% linguistically & KPCA in $\mathbb{R}^{8}$ & 'kosher', 'grammars', 'usages', 'propagating', 'cultivating' \\ \hline
+linguistically & KPCA in $\mathbb{R}^{16}$ & 'shaivism', 'daoism', 'orcadian', 'polytheistic', 'interchangeably'\\ \hline
+% linguistically & KPCA in $\mathbb{R}^{32}$ & 'daoism', 'polytheistic', 'shaivism', 'abrahamic', 'heathens' \\ \hline
+% linguistically & KPCA in $\mathbb{R}^{64}$ & 'polytheistic', 'shaivism', 'daoism', 'heathens', 'abrahamic'\\ \hline
+linguistically & Original in $\mathbb{R}^{128}$ & 'polytheistic', 'shaivism', 'daoism', 'usages', 'heathens' \\ \hline
+% statistics & KPCA in $\mathbb{R}^{8}$ & 'ipc', 'partnerships', 'federations', 'nordic', 'sponsors'\\ \hline
+statistics & KPCA in $\mathbb{R}^{16}$ & 'statistical', 'voting', 'selection', 'competitiveness', 'regulation'\\ \hline
+% statistics & KPCA in $\mathbb{R}^{32}$ & 'statistical', 'statistic', 'benchmark', 'proficiency', 'statistically' \\ \hline
+% statistics & KPCA in $\mathbb{R}^{64}$ & 'statistical', 'statistic', 'stats', 'cumulative', 'milestones'\\ \hline
+statistics & Original in $\mathbb{R}^{128}$ & 'statistical', 'statistic', 'stats', 'cumulative', 'milestones'\\ \hline
+% firecracker & KPCA in $\mathbb{R}^{8}$ &'callback', 'charizard', 'scintillating', 'junkies', 'lithe'\\ \hline
+firecracker & KPCA in $\mathbb{R}^{16}$ & 'junkies', 'glitz', 'mashing', 'kiddie', 'stringing' \\ \hline
+% firecracker & KPCA in $\mathbb{R}^{32}$ & 'mashing', 'glitz', 'outshines', 'jittery', 'daydreaming'\\ \hline
+% firecracker & KPCA in $\mathbb{R}^{64}$ & 'mashing', 'jittery', 'outshines', 'jackhammer', 'shrieking'\\ \hline
+firecracker & Original in $\mathbb{R}^{128}$ & 'jittery', 'mashing', 'jackhammer', 'outshines', 'shrieking'\\ \hline
+\end{tabular}
+\caption{\textit{Ex-post} KPCA: comparison of KPCA-compressed embeddings in $\mathbb{R}^{16}$, and original embeddings in identifying \textbf{5 Nearest Neighbors} of a set of words.}
+\label{table:5nn-1k-post}
+\end{table}
+
+%% OK 01.37
+
+\begin{table}[h]
+
+\centering
+
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+\textbf{Pair}  & \textbf{Model} & \textbf{Squared Cosine Distance} \\ \hline
+quick, quickly & KPCA in $\mathbb{R}^{8}$       & 0.559  \\ \hline
+quick, quickly & KPCA in $\mathbb{R}^{16}$      & 0.656  \\ \hline
+quick, quickly &  KPCA in $\mathbb{R}^{32}$     & 0.698  \\ \hline
+quick, quickly &  KPCA in $\mathbb{R}^{64}$     &  0.685 \\ \hline
+quick, quickly & Original in $\mathbb{R}^{128}$ &  0.680 \\ \hline
+statistical, statistically & KPCA in $\mathbb{R}^{8}$       & 0.467   \\ \hline
+statistical, statistically & KPCA in $\mathbb{R}^{16}$      & 0.298  \\ \hline
+statistical, statistically &  KPCA in $\mathbb{R}^{32}$     & 0.371  \\ \hline
+statistical, statistically &  KPCA in $\mathbb{R}^{64}$     & 0.382   \\ \hline
+statistical, statistically & Original in $\mathbb{R}^{128}$ & 0.355  \\ \hline
+calm, calmly & KPCA in $\mathbb{R}^{8}$       & 0.206  \\ \hline
+calm, calmly & KPCA in $\mathbb{R}^{16}$      & 0.315   \\ \hline
+calm, calmly &  KPCA in $\mathbb{R}^{32}$     & 0.387  \\ \hline
+calm, calmly &  KPCA in $\mathbb{R}^{64}$     & 0.428  \\ \hline
+calm, calmly & Original in $\mathbb{R}^{128}$ & 0.424  \\ \hline
+thorough, thoroughly & KPCA in $\mathbb{R}^{8}$       & 0.521   \\ \hline
+thorough, thoroughly & KPCA in $\mathbb{R}^{16}$      & 0.554   \\ \hline
+thorough, thoroughly &  KPCA in $\mathbb{R}^{32}$     & 0.565  \\ \hline
+thorough, thoroughly &  KPCA in $\mathbb{R}^{64}$     & 0.566   \\ \hline
+thorough, thoroughly & Original in $\mathbb{R}^{128}$ & 0.543  \\ \hline
+
+\end{tabular}
+\caption{\textit{ex-post} KPCA: comparison of KPCA-compressed embeddings and original embeddings in \textbf{word matching tasks},  scored according to squared cosine distance: KPCA is evaluated for various degrees of dimensionalities, namely $\{8,16,32,64\}$.}
+\label{table:synmatch-post}
+\end{table}
+
+
+%% OK 01.37
+
+\begin{table}[h]
+
+\centering
+
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor[HTML]{C0C0C0} 
+\textbf{Dimensionality} & \textbf{Spearman correlation coefficient} \\ \hline
+KPCA in $\mathbb{R}^8$ , 1 epoch & 0.418 \\ \hline
+KPCA in $\mathbb{R}^{16}$, 1 epoch & 0.436 \\ \hline
+KPCA in $\mathbb{R}^{32}$, 1 epoch & 0.427 \\ \hline
+KPCA in $\mathbb{R}^{64}$, 1 epoch & 0.412 \\ \hline
+Original in $\mathbb{R}^{128}$, 1 epoch & 0.447 \\ \hline
+KPCA in $\mathbb{R}^8$ , 2 epochs & 0.431 \\ \hline
+KPCA in $\mathbb{R}^{16}$, 2 epochs & 0.476 \\ \hline
+KPCA in $\mathbb{R}^{32}$, 2 epochs & 0.481 \\ \hline
+KPCA in $\mathbb{R}^{64}$, 2 epochs & 0.479 \\ \hline
+Original in $\mathbb{R}^{128}$, 2 epochs & 0.490 \\ \hline
+KPCA in $\mathbb{R}^8$ , 3 epoch & 0.433\\ \hline
+KPCA in $\mathbb{R}^{16}$, 3 epochs & 0.477 \\ \hline
+KPCA in $\mathbb{R}^{32}$, 3 epochs & 0.490\\ \hline
+KPCA in $\mathbb{R}^{64}$, 3 epochs & 0.506\\ \hline
+Original in $\mathbb{R}^{128}$, 3 epochs & 0.518 \\ \hline
+\end{tabular}
+\caption{\textit{Ex-post} KPCA: \textbf{Spearman correlation coefficient} of original embeddings and KPCA embeddings, for various degrees of dimensionality reduction (higher is better). }
+\label{table:quant-1k-post}
+\end{table}
+

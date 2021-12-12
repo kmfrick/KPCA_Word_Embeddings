@@ -1,0 +1,30 @@
+\subsection{KPCA for warm start}
+
+\subsubsection{Qualitative performance}
+Our qualitative evaluation in \cref{table:5nn-1k-pre} shows that, for common words, KPCA initialization is able to place very uncommon words next to their morphological cognates, while cold-start Word2vec is completely off the track initially but catches up after some training. For example, a cold-start model places common words such as ``history'' near related words such as ``legacy'' after one iteration but fails to learn coherent neighbors for more uncommon words, such as ``firecracker'' unless further training is carried out.
+
+The initial performance is not on par with what is reported in \cite{gupta_improving_2019}, which suggests vocabulary size plays a significant role in the quality of morphological word embeddings. We find that after just one epoch, semantic information encoded by Word2vec entirely takes precedence, and the model disregards the morphological information encoded in the initial start. Moreover, the quality of the cold-start embeddings after one epoch is better than what the authors have found in \cite{gupta_improving_2019}, which is probably to be attributed to a better implementation of Word2vec used in our work.
+
+We find that, predictably, the embeddings which perform the best in syntactic matching tasks are those calculated using only kernel PCA. We can see this from \cref{fig:cos_dist_ante}: at 0 epochs (meaning KPCA without further training), the squared cosine distance is almost 0, with the curious exception of "statistical-statistically". 
+This is due to the high morphological similarity of adjectives and their related adverbs in English.
+However, we also see that, for a vocabulary size of the order of 1000, in such morphology-related tasks initializing Word2vec with morphological information encoded using kernel PCA does not show a consistent improvement with respect to a cold-start. 
+
+\subsubsection{Quantitative performance}
+From \cref{fig:spear_ante} we can see how after one epoch, the warm-started model performs on par with a cold-start model, while the cold-start model performs better when more training is allowed. 
+
+Therefore, we conclude that using KPCA for Word2vec warm-start may lead to better embeddings only when the training vocabulary size is large, and only a few epochs of training are allowed. Moreover, the hyperparameters in the implementation of Word2vec together with the choice of the optimizer and the learning rate decay, evidently matter more than the initialization, since the more optimized implementation we are using is able to  identify useful embeddings more quickly than what was implied by \cite{gupta_improving_2019}.
+
+Since low-powered environments - like a laptop computer- usually restrict memory usage as well as training time, the trade-off is worth it if fitting a kernel PCA on a large vocabulary translates into saving a significant amount of time compared to further training of Word2vec.
+Furthermore, \textbf{depending on the task at hand}, warm-start Word2vec embeddings might prove more suitable, as shown by our syntactic matching example, where embeddings initialized with a kernel PCA lose less accuracy in adjective-adverb matching when they are trained.
+
+
+
+
+\subsection{KPCA for dimensionality reduction}
+
+
+We see that performing very aggressive dimensionality reduction, such as moving from 128 to 8 dimensions, leads to embeddings that have largely lost meaning, and are not even able to relate ``statistics'' and ``statistical''. However, we find this effect largely decreases with as few as 16 embeddings for easier and more common words, like relating Moscow to other cities. On the other hand, less common words such as ``firecracker'' need a very high dimension in order to be related to words which, if not close in meaning, make sense as context words. 
+
+We can visualize the effects of retaining different dimensionalities in \cref{fig:scree_post} and \cref{fig:spear_post}. For the first epoch, the accuracy of the resulting embeddings strongly depends on the number of components, with 16 being the most suitable choice both according to NRMSE and Spearman correlation with state-of-the-art embeddings. However, the more we increase training time, the more the error seems to become linear in dimensionality. Thus, when there are fewer than 3 epochs of training, performing a moderately aggressive dimensionality reduction leads to better performance in syntactic matching tasks \emph{with respect to a less aggressive one}. 
+
+This reasoning is also supported by the performance in adjective-adverb matching tasks, which we show in \cref{fig:cos_dist_post}: a moderate dimensionality reduction seems to outperform the original embeddings in $\mathbb{R}^{128}$. This suggests that performing kernel PCA might allow already-trained word embeddings to better cluster together words that are close in meaning, thanks to what the feature map is learning, at the cost of the general quality of the embedding.
