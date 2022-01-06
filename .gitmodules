@@ -1,0 +1,6 @@
+[submodule "torchw2vec"]
+	path = torchw2vec
+	url = https://github.com/Andras7/word2vec-pytorch
+[submodule "SentEval"]
+	path = SentEval
+	url = https://github.com/facebookresearch/SentEval
