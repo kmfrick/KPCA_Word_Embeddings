@@ -1,0 +1,128 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+# ex ante 
+## cosine distance
+
+```{r}
+library(ggplot2)
+library(dplyr)
+data <- read.csv("~/Library/Mobile Documents/com~apple~CloudDocs/FIB/kmlmm/kml/project/data_ante.csv", header=FALSE, sep=",")
+data[,-4] <- lapply(data[,-4], as.factor)
+colnames(data) <- c("target","method","epochs","measure")
+new_measure <- c(0.0004, 0.496, 0.690, 0.494, 0.679, 0.199, 0.222, 0.334, 0.228, 0.356, 0.003, 0.176, 0.434, 0.195, 0.425, 0.000, 0.138, 0.530, 0.150, 0.543)
+data <- data %>% mutate(measure = new_measure)
+cos_ante <- ggplot(data, aes(epochs,measure,fill=method)) + geom_bar(position="dodge", stat="identity") +
+    facet_wrap(~target) + ylab("Squared Cosine Distance")
+```
+
+```{r}
+setEPS()
+postscript("cos_dist_ante.eps",width=7, height=5)
+cos_ante
+dev.off()
+```
+
+
+## grid search 
+
+```{r}
+Dimensionality = c(32 ,64 ,128 ,256 ,512)
+NRMSE = c(6.132, 5.349, 4.440, 3.419, 2.863)
+data <- data.frame(Dimensionality,NRMSE)
+scree_ante <- ggplot(data, aes(Dimensionality,NRMSE,label = Dimensionality)) + geom_line(color="green") + geom_point() + geom_text(hjust=1, vjust=1)
+```
+
+```{r}
+setEPS()
+postscript("scree_ante.eps",width=7, height=5)
+scree_ante
+dev.off()
+```
+
+## spearman
+
+```{r}
+data <- read.csv("~/Library/Mobile Documents/com~apple~CloudDocs/FIB/kmlmm/kml/project/spearman_ante.csv", header=FALSE, sep=",")
+data[,-3] <- lapply(data[,-3], as.factor)
+colnames(data) <- c("method","epochs","spearman")
+spear_ante <- ggplot(data, aes(epochs,spearman,color = method, group = method)) + geom_line() + geom_point(size=2) + ylab("Spearman correlation coefficient")
+setEPS()
+postscript("spear_ante.eps",width=7, height=5)
+spear_ante
+dev.off()
+```
+
+
+
+
+
+
+
+
+#################
+# ex post
+
+```{r}
+data <- read.csv("~/Library/Mobile Documents/com~apple~CloudDocs/FIB/kmlmm/kml/project/data_post.csv", header=FALSE, sep=",")
+data[,-4] <- lapply(data[,-4], as.factor)
+colnames(data) <- c("target","method","dimensionality","measure")
+data$dimensionality <- factor(data$dimensionality, levels = c("R^8","R^16","R^32","R^64","R^128"))
+
+cos_post <- ggplot(data, aes(dimensionality,measure,fill=method)) + geom_bar(position="dodge", stat="identity") +
+    facet_wrap(~target) + ylab("Squared Cosine Distance as % of R^128") + scale_fill_manual(breaks = levels(data$method),
+                        values=c("#FF6600","pink"))
+```
+
+```{r}
+setEPS()
+postscript("cos_dist_post.eps",width=7, height=5)
+cos_post
+dev.off()
+```
+
+
+
+# NRMSE to dimensionality
+
+```{r}
+Dimensionality <- rep(c(8, 16, 32, 64),3)
+NRMSE <- c(13.5, 11.5, 9.59, 8.27, 15.4, 14.0, 12.0, 9.0, 17.8, 16.5, 14.8, 11.7)
+epochs <- append(rep(1,4), rep(2,4)) %>% append(rep(3,4))
+
+data <- data.frame(Dimensionality,epochs,NRMSE)
+data$epochs <- as.factor(data$epochs)
+scree_post <- ggplot(data, aes(Dimensionality,NRMSE,label = Dimensionality,group=epochs,color=epochs)) + geom_line() + geom_point() + geom_text(hjust=1, vjust=1)
+scree_post
+```
+
+```{r}
+setEPS()
+postscript("scree_post.eps",width=7, height=5)
+scree_post
+dev.off()
+```
+
+
+
+# spearman
+
+```{r}
+data <- read.csv("~/Library/Mobile Documents/com~apple~CloudDocs/FIB/kmlmm/kml/project/spearman_post.csv", header=FALSE, sep=",")
+data[,-4] <- lapply(data[,-4], as.factor)
+colnames(data) <- c("method","dimensionality","epochs","spearman")
+data$dimensionality <- factor(data$dimensionality, levels = c("R^8","R^16","R^32","R^64","R^128"))
+spear_post <- ggplot(data, aes(dimensionality,spearman,color = method, group = method)) + facet_wrap(~epochs) + geom_line() + geom_point(size=2) + ylab("Spearman correlation coefficient") + theme(axis.text.x = element_text(angle = 45,vjust=1))
+setEPS()
+postscript("spear_post.eps",width=7, height=5)
+spear_post
+dev.off()
+```
+
+
+
+
+

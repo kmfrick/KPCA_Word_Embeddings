@@ -1,0 +1,21 @@
+quick-quickly, KPCA-warm-start, 0, 0.0004
+quick-quickly, KPCA-warm-start, 1 , 0.397
+quick-quickly, KPCA-warm-start, 3 , 0.656
+quick-quickly, random-start, 1 , 0.438
+quick-quickly, random-start, 3 , 0.649
+statistical-statistically, KPCA-warm-start, 0, 0.199
+statistical-statistically, KPCA-warm-start, 1 , 0.192
+statistical-statistically, KPCA-warm-start, 3 , 0.312
+statistical-statistically, random-start, 1 , 0.205
+statistical-statistically, random-start, 3 , 0.316
+calm-calmly, KPCA-warm-start, 0, 0.003
+calm-calmly, KPCA-warm-start, 1 , 0.156
+calm-calmly, KPCA-warm-start, 3 , 0.282
+calm-calmly, random-start, 1 , 0.163
+calm-calmly, random-start, 3 , 0.310
+thorough-thoroughly, KPCA-warm-start, 0, 0.0002
+thorough-thoroughly, KPCA-warm-start, 1 , 0.121
+thorough-thoroughly, KPCA-warm-start, 3 , 0.525
+thorough-thoroughly, random-start, 1 , 0.125
+thorough-thoroughly, random-start, 3 , 0.465
+
